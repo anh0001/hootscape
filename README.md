@@ -36,6 +36,7 @@ HootScape creates a unique, multi-sensory interactive experience that blurs the 
 # Ensure Python and venv support are installed
 sudo apt update
 sudo apt install python3-venv python3-pip -y
+sudo apt install portaudio19-dev
 
 # Create and activate a virtual environment
 python3 -m venv hootscape-env
@@ -44,6 +45,9 @@ source hootscape-env/bin/activate
 # Upgrade pip and install the core package
 pip install --upgrade pip
 pip install pipecat-ai
+
+# other packages
+pip install python-dotenv
 
 # For additional AI services (e.g. OpenAI, Deepgram)
 pip install "pipecat-ai[openai,deepgram]"

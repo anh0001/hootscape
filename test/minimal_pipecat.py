@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv
 import asyncio
 import aiohttp
 from pipecat.frames.frames import TextFrame
@@ -8,6 +10,13 @@ from pipecat.services.elevenlabs import ElevenLabsTTSService
 from pipecat.transports.local.audio import LocalAudioTransport
 from pipecat.transports.base_transport import TransportParams
 
+# Load variables from .env file into the environment
+load_dotenv()
+
+# Retrieve the API key and voice ID from environment variables
+elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
+
 async def main():
     async with aiohttp.ClientSession() as session:
         transport = LocalAudioTransport(
@@ -15,8 +24,8 @@ async def main():
         )
         tts = ElevenLabsTTSService(
             aiohttp_session=session,
-            api_key="sk_c0d6a7d853bc553f0b169fc4f2ac66506865b502704fdfc7",  # Replace with your API key
-            voice_id="Xb7hH8MSUJpSbSDYk0k2"            # Replace with your voice ID
+            api_key=elevenlabs_api_key,
+            voice_id=elevenlabs_voice_id
         )
         pipeline = Pipeline([
             tts,                # TTS service converts text to audio
