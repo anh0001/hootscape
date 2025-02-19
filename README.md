@@ -29,16 +29,27 @@ HootScape creates a unique, multi-sensory interactive experience that blurs the 
 
 ## Installation
 
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/hootscape.git
-cd hootscape
-```
-
+1. Clone the repository
 2. Create and activate a virtual environment:
+
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Ensure Python and venv support are installed
+sudo apt update
+sudo apt install python3-venv python3-pip -y
+
+# Create and activate a virtual environment
+python3 -m venv hootscape-env
+source hootscape-env/bin/activate
+
+# Upgrade pip and install the core package
+pip install --upgrade pip
+pip install pipecat-ai
+
+# For additional AI services (e.g. OpenAI, Deepgram)
+pip install "pipecat-ai[openai,deepgram]"
+
+# Copy the environment template and adjust as needed
+mv dot-env.template .env
 ```
 
 3. Install dependencies:
