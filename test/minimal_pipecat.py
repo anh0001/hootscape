@@ -20,7 +20,10 @@ elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
 async def main():
     async with aiohttp.ClientSession() as session:
         transport = LocalAudioTransport(
-            TransportParams(audio_out_enabled=True)
+            TransportParams(
+                audio_out_enabled=True,
+                audio_out_sample_rate=24000  # match TTS service sample rate
+            )
         )
         # Changed: Instantiate ElevenLabsTTSService with custom parameters
         tts = ElevenLabsTTSService(
