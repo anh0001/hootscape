@@ -3,20 +3,23 @@ from pipecat.frames.frames import TextFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
+from pipecat.processors.frame_processor import FrameProcessor  # new import
 
 # Global list to capture processed frames
 processed_frames = []
 
-# Asynchronous echo service: it stores and returns the received frame.
-async def echo_service(frame):
-    processed_frames.append(frame)
-    return frame
+# Remove the plain echo_service function.
+# Instead, define a custom processor that wraps your echo service.
+class EchoProcessor(FrameProcessor):
+    async def process_frame(self, frame, direction):
+        processed_frames.append(frame)
+        return frame
 
 async def main():
     processed_frames.clear()
     
-    # Construct the pipeline with the echo service.
-    pipeline = Pipeline([echo_service])
+    # Use an instance of EchoProcessor instead of the raw function.
+    pipeline = Pipeline([EchoProcessor()])
     task = PipelineTask(pipeline)
     runner = PipelineRunner()
     
