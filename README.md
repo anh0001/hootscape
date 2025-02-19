@@ -48,6 +48,7 @@ pip install pipecat-ai
 
 # other packages
 pip install python-dotenv
+pip install PyAudio
 
 # For additional AI services (e.g. OpenAI, Deepgram)
 pip install "pipecat-ai[openai,deepgram]"
