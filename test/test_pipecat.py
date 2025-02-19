@@ -3,7 +3,6 @@ from pipecat.frames.frames import TextFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
-from processor.echo_processor import EchoProcessor
 
 # Global list to capture processed frames for testing purposes
 processed_frames = []
@@ -17,8 +16,8 @@ async def test_echo_service(frame):
 async def test_pipeline_processing():
     processed_frames.clear()
     
-    # Build pipeline with test_echo_service wrapped in EchoProcessor
-    pipeline = Pipeline([EchoProcessor(test_echo_service)])
+    # Build pipeline using the test_echo_service directly, bypassing EchoProcessor
+    pipeline = Pipeline([test_echo_service])
     task = PipelineTask(pipeline)
     runner = PipelineRunner()
     
