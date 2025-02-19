@@ -77,7 +77,7 @@ hootscape/
 ├── audio/                  # Audio and soundscape management
 ├── robot/                  # Robot control system
 ├── voice/                  # Voice recognition and synthesis
-└── utils/                 # Utility functions
+└── utils/                  # Utility functions
 ```
 
 ## Configuration
