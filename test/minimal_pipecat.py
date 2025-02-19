@@ -11,6 +11,9 @@ processed_frames = []
 # Remove the plain echo_service function.
 # Instead, define a custom processor that wraps your echo service.
 class EchoProcessor(FrameProcessor):
+    def __init__(self):
+        super().__init__()  # Initialize FrameProcessor internals
+        
     async def process_frame(self, frame, direction):
         processed_frames.append(frame)
         return frame
