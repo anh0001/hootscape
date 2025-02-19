@@ -49,7 +49,7 @@ pip install pipecat-ai
 pip install "pipecat-ai[openai,deepgram]"
 
 # Copy the environment template and adjust as needed
-mv dot-env.template .env
+cp dot-env.template .env
 ```
 
 3. Install dependencies:
