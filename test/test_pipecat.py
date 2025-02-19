@@ -1,26 +1,34 @@
-import asyncio
+import pytest
 from pipecat.frames.frames import TextFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
-from processor.echo_processor import EchoProcessor  # new import
+from processor.echo_processor import EchoProcessor
 
-# Define a simple service that prints out the frame content
-async def echo_service(frame):
-    print("Processed frame:", frame)
+# Global list to capture processed frames for testing purposes
+processed_frames = []
+
+# Test service that appends the frame to the global list
+async def test_echo_service(frame):
+    processed_frames.append(frame)
     return frame
 
-async def main():
-    # Build a simple pipeline by wrapping the echo_service in EchoProcessor
-    pipeline = Pipeline([EchoProcessor(echo_service)])  # modified line
+@pytest.mark.asyncio
+async def test_pipeline_processing():
+    processed_frames.clear()
+    
+    # Build pipeline with test_echo_service wrapped in EchoProcessor
+    pipeline = Pipeline([EchoProcessor(test_echo_service)])
     task = PipelineTask(pipeline)
     runner = PipelineRunner()
     
-    # Queue a test TextFrame
-    await task.queue_frame(TextFrame("Hello, Pipecat!"))
+    # Create and queue a test frame
+    test_frame = TextFrame("Hello, Pipecat!")
+    await task.queue_frame(test_frame)
     
-    # Run the pipeline task
+    # Run the pipeline
     await runner.run(task)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    
+    # Verify that the pipeline processed exactly one frame and it matches the test input
+    assert len(processed_frames) == 1, "Expected one processed frame"
+    assert processed_frames[0] == test_frame, "The processed frame does not match the input"
