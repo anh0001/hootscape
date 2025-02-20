@@ -28,22 +28,13 @@ elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
 device_index_env = os.getenv("AUDIO_DEVICE_INDEX")
 audio_device_index = int(device_index_env) if device_index_env else None
 
-# If no index specified, list available output devices
-if audio_device_index is None:
-    p = pyaudio.PyAudio()
-    for i in range(p.get_device_count()):
-        dev = p.get_device_info_by_index(i)
-        if dev.get('maxOutputChannels') > 0:
-            print(f"Output Device id {i} - {dev.get('name')}")
-    p.terminate()
-
 async def main():
     async with aiohttp.ClientSession() as session:
         # Changed: Use the custom transport params with output_device_index.
         transport_params = CustomTransportParams(
             audio_out_enabled=True,
             audio_out_sample_rate=24000,
-            output_device_index=audio_device_index
+            output_device_index=None
         )
         transport = LocalAudioTransport(transport_params)
         
