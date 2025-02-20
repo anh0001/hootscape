@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 import asyncio
 import aiohttp
+import pyaudio  # new import for device enumeration
 from pipecat.frames.frames import TextFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
@@ -16,13 +17,26 @@ load_dotenv()
 # Retrieve the API key and voice ID from environment variables
 elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
 elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
+# Retrieve audio device index from env (optional)
+device_index_env = os.getenv("AUDIO_DEVICE_INDEX")
+audio_device_index = int(device_index_env) if device_index_env else None
+
+# If no index specified, list available output devices
+if audio_device_index is None:
+    p = pyaudio.PyAudio()
+    for i in range(p.get_device_count()):
+        dev = p.get_device_info_by_index(i)
+        if dev.get('maxOutputChannels') > 0:
+            print(f"Output Device id {i} - {dev.get('name')}")
+    p.terminate()
 
 async def main():
     async with aiohttp.ClientSession() as session:
         transport = LocalAudioTransport(
             TransportParams(
                 audio_out_enabled=True,
-                audio_out_sample_rate=24000  # match TTS service sample rate
+                audio_out_sample_rate=24000,  # match TTS service sample rate
+                output_device_index=audio_device_index  # new: explicitly set valid device index if provided
             )
         )
         # Changed: Instantiate ElevenLabsTTSService with custom parameters
