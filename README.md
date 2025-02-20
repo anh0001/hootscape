@@ -112,6 +112,15 @@ python main.py
    - "Give me a hint"
    - "Is the baby owl nearby?"
 
+## HTTP Text Input
+
+The system listens for text via an HTTP POST request to its /text endpoint (default port 8080). 
+Send a JSON payload containing a "text" field:
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{"text": "Hello, system!"}' http://localhost:8080/text
+```
+When received, the system publishes a "text_received" event and processes the text, converting it to speech using ElevenLabs TTS.
+
 ## Development
 
 ### Adding New Features
