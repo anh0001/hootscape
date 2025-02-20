@@ -7,9 +7,16 @@ from pipecat.frames.frames import TextFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
-from pipecat.services.elevenlabs import ElevenLabsTTSService, Language  # Changed: Added Language
+from pipecat.services.elevenlabs import ElevenLabsTTSService, Language
 from pipecat.transports.local.audio import LocalAudioTransport
-from pipecat.transports.base_transport import TransportParams
+# Changed: Import base model and add new field support
+from pipecat.transports.base_transport import TransportParams as BaseTransportParams
+from pydantic import Field
+from typing import Optional
+
+# Create a custom TransportParams model that includes output_device_index.
+class CustomTransportParams(BaseTransportParams):
+    output_device_index: Optional[int] = Field(default=None)
 
 # Load variables from .env file into the environment
 load_dotenv()
@@ -32,14 +39,12 @@ if audio_device_index is None:
 
 async def main():
     async with aiohttp.ClientSession() as session:
-        # Build TransportParams without forcing output_device_index if not provided.
-        transport_params = TransportParams(
+        # Changed: Use the custom transport params with output_device_index.
+        transport_params = CustomTransportParams(
             audio_out_enabled=True,
-            audio_out_sample_rate=44100  # match TTS service sample rate
+            audio_out_sample_rate=24000,
+            output_device_index=audio_device_index
         )
-        if audio_device_index is not None:
-            transport_params = transport_params.copy(update={"output_device_index": audio_device_index})
-        
         transport = LocalAudioTransport(transport_params)
         
         # Changed: Instantiate ElevenLabsTTSService with custom parameters
@@ -47,7 +52,7 @@ async def main():
             aiohttp_session=session,
             api_key=elevenlabs_api_key,
             voice_id=elevenlabs_voice_id,
-            sample_rate=44100,  # Set desired output sample rate (Hz)
+            sample_rate=24000,  # Set desired output sample rate (Hz)
             params=ElevenLabsTTSService.InputParams(
                 language=Language.EN,        # Specify language
                 stability=0.7,               # Voice stability control
