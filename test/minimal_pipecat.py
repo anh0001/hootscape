@@ -32,19 +32,22 @@ if audio_device_index is None:
 
 async def main():
     async with aiohttp.ClientSession() as session:
-        transport = LocalAudioTransport(
-            TransportParams(
-                audio_out_enabled=True,
-                audio_out_sample_rate=24000,  # match TTS service sample rate
-                output_device_index=audio_device_index  # new: explicitly set valid device index if provided
-            )
+        # Build TransportParams without forcing output_device_index if not provided.
+        transport_params = TransportParams(
+            audio_out_enabled=True,
+            audio_out_sample_rate=44100  # match TTS service sample rate
         )
+        if audio_device_index is not None:
+            transport_params = transport_params.copy(update={"output_device_index": audio_device_index})
+        
+        transport = LocalAudioTransport(transport_params)
+        
         # Changed: Instantiate ElevenLabsTTSService with custom parameters
         tts = ElevenLabsTTSService(
             aiohttp_session=session,
             api_key=elevenlabs_api_key,
             voice_id=elevenlabs_voice_id,
-            sample_rate=24000,  # Set desired output sample rate (Hz)
+            sample_rate=44100,  # Set desired output sample rate (Hz)
             params=ElevenLabsTTSService.InputParams(
                 language=Language.EN,        # Specify language
                 stability=0.7,               # Voice stability control
