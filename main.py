@@ -12,10 +12,11 @@ from pipecat.transports.local.audio import LocalAudioTransport
 from pipecat.transports.base_transport import TransportParams as BaseTransportParams
 from pydantic import Field
 from api.text_receiver import handle_text  # new import
+from typing import Optional  # added import
 
 # Define a custom TransportParams model including output_device_index.
 class CustomTransportParams(BaseTransportParams):
-    output_device_index: int = Field(default=None)
+    output_device_index: Optional[int] = Field(default=None)  # updated type annotation
 
 # Load environment variables
 load_dotenv()
