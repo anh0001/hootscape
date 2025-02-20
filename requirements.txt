@@ -1,0 +1,11 @@
+# Core dependencies for HootScape
+python-dotenv
+pyaudio
+aiohttp
+pydantic
+
+# HootScape’s voice integration and pipeline services, with extras for OpenAI and Deepgram support.
+pipecat-ai[openai,deepgram]
+
+# Spatial audio processing for the immersive soundscape.
+spatialscaper

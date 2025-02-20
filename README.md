@@ -29,45 +29,31 @@ HootScape creates a unique, multi-sensory interactive experience that blurs the 
 
 ## Installation
 
-1. Clone the repository
-2. Create and activate a virtual environment:
-
+### 1. Setup Virtual Environment
 ```bash
-# Ensure Python and venv support are installed
-sudo apt update
-sudo apt install python3-venv python3-pip -y
-sudo apt install portaudio19-dev
-
-# Create and activate a virtual environment
 python3 -m venv hootscape-env
 source hootscape-env/bin/activate
+```
 
-# Upgrade pip and install the core package
+### 2. Install Python Dependencies
+```bash
 pip install --upgrade pip
-pip install pipecat-ai
-
-# other packages
-pip install python-dotenv
-pip install PyAudio
-
-# For additional AI services (e.g. OpenAI, Deepgram)
-pip install "pipecat-ai[openai,deepgram]"
-
-# Copy the environment template and adjust as needed
+pip install -r requirements.txt
+```
+```bash
 cp dot-env.template .env
 ```
 
-3. Install dependencies:
+### 3. Install System Dependencies (Ubuntu 22.04)
 ```bash
-pip install -r requirements.txt
+sudo apt update
+sudo apt install portaudio19-dev
 ```
 
-4. Set up audio assets:
+### 4. Set Up Audio Assets
 ```bash
-# Create necessary directories
 mkdir -p audio/assets/forest audio/assets/owls
-
-# Add your audio files to the respective directories:
+# Add your audio files:
 # - audio/assets/forest/ (ambient sounds)
 # - audio/assets/owls/ (owl sound effects)
 ```
