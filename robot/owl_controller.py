@@ -42,29 +42,74 @@ class OwlController:
             print(f"[ERROR] Error reading positions: {e}")
             return None
     
-    # Five Owl Movements:
+    # Updated movement methods re-mapped based on Processing code:
     def nodding(self):
-        self.set_motor_positions(2100, 2045, 2045)
+        """
+        tilt toward servo 1.
+        - Servo 1 remains at the default (2045).
+        - Servo 2 is increased.
+        - Servo 3 is decreased.
+        """
+        default = 2045
+        delta = 90
+        pos1 = default         # Servo 1 remains neutral.
+        pos2 = default + delta # Servo 2 tilts upward.
+        pos3 = default - delta # Servo 3 tilts downward.
+        self.set_motor_positions(pos1, pos2, pos3)
         time.sleep(1)
         self.reset_posture()
     
     def rotating(self):
-        self.set_motor_positions(2045, 2100, 2045)
+        """
+        uniform upward movement.
+        """
+        default = 2045
+        delta = 70
+        pos = default + delta  # All servos move upward equally.
+        self.set_motor_positions(pos, pos, pos)
         time.sleep(1)
         self.reset_posture()
     
     def upright_posture(self):
-        self.set_motor_positions(2045, 2045, 2100)
+        """
+        tilt toward servo 3.
+        - Servo 1 is increased.
+        - Servo 2 is decreased.
+        - Servo 3 remains at default.
+        """
+        default = 2045
+        delta = 90
+        pos1 = default + delta # Servo 1 tilts upward.
+        pos2 = default - delta # Servo 2 tilts downward.
+        pos3 = default         # Servo 3 remains neutral.
+        self.set_motor_positions(pos1, pos2, pos3)
         time.sleep(1)
         self.reset_posture()
     
     def backward_posture(self):
-        self.set_motor_positions(2000, 2000, 2000)
+        """
+        uniform downward movement.
+        """
+        default = 2045
+        delta = 90
+        pos = default - delta  # All servos move downward equally.
+        self.set_motor_positions(pos, pos, pos)
         time.sleep(1)
         self.reset_posture()
     
     def tilting(self):
-        self.set_motor_positions(2100, 2045, 2000)
+        """
+        tilt toward servo 2.
+        - Servo 1 is decreased.
+        - Servo 2 remains at the default.
+        - Servo 3 is increased.
+        """
+        default = 2045
+        delta = 90
+        pos1 = default - delta # Servo 1 tilts downward.
+        pos2 = default         # Servo 2 remains neutral.
+        pos3 = default + delta # Servo 3 tilts upward.
+        self.set_motor_positions(pos1, pos2, pos3)
         time.sleep(1)
         self.reset_posture()
 
