@@ -11,12 +11,13 @@ from pipecat.services.elevenlabs import ElevenLabsTTSService, Language
 from pipecat.transports.local.audio import LocalAudioTransport
 from pipecat.transports.base_transport import TransportParams as BaseTransportParams
 from pydantic import Field
-from api.text_receiver import handle_text  # new import
-from typing import Optional  # added import
+from api.text_receiver import handle_text
+from typing import Optional
+from robot.owl_controller import OwlController  # new import
 
 # Define a custom TransportParams model including output_device_index.
 class CustomTransportParams(BaseTransportParams):
-    output_device_index: Optional[int] = Field(default=None)  # updated type annotation
+    output_device_index: Optional[int] = Field(default=None)
 
 # Load environment variables
 load_dotenv()
@@ -35,6 +36,35 @@ async def start_http_server(event_bus):
     # Keep server running
     while True:
         await asyncio.sleep(3600)
+
+# New async function to poll the movement config and drive the owl controller.
+async def poll_owl_movement(session, owl: OwlController):
+    loop = asyncio.get_running_loop()
+    movement_map = {
+        "1": owl.nodding,
+        "2": owl.rotating,
+        "3": owl.upright_posture,
+        "4": owl.backward_posture,
+        "5": owl.tilting,
+    }
+    while True:
+        try:
+            url = "http://54.250.108.126/getConfig.php?configKey=hootscape_movement_value"
+            async with session.get(url) as resp:
+                data = await resp.json()
+            if data.get("result") == 1:
+                movement_value = data.get("value")
+                move_func = movement_map.get(movement_value)
+                if move_func:
+                    await loop.run_in_executor(None, move_func)
+                    set_url = f"http://54.250.108.126/setConfig.php?configKey=hootscape_movement_value&configValue=0"
+                    async with session.get(set_url) as set_resp:
+                        await set_resp.json()
+            else:
+                print(f"[WARN] Unexpected result from getConfig: {data}")
+        except Exception as e:
+            print(f"[ERROR] Failed to poll owl movement: {e}")
+        await asyncio.sleep(5)
 
 async def main():
     # Initialize event bus and create an aiohttp session
@@ -79,10 +109,13 @@ async def main():
             await task.queue_frame(TextFrame(text))
         event_bus.subscribe("text_received", process_text)
 
-        # Start the HTTP text receiver server concurrently
+        # Instantiate the OwlController (ensure port matches your setup)
+        owl = OwlController(port='/dev/tty.usbserial-AB0MHXVL')
+
+        # Start the HTTP text receiver server, pipeline runner, and owl movement polling concurrently
         asyncio.create_task(start_http_server(event_bus))
-        # Run the pipeline runner concurrently.
         asyncio.create_task(runner.run(task))
+        asyncio.create_task(poll_owl_movement(session, owl))
         
         try:
             while True:
