@@ -50,7 +50,10 @@ pip install -r requirements.txt
 cp dot-env.template .env
 ```
 
-### 4. Set Up Audio Assets
+### 4. Configure Environment Settings
+Edit the `.env` file to set your HTTP server and robot parameters.
+
+### 5. Set Up Audio Assets
 ```bash
 mkdir -p audio/assets/forest audio/assets/owls
 # Add your audio files:
@@ -93,6 +96,8 @@ ROBOT_SETTINGS = {
 ROOM_DIMENSIONS = [5.0, 4.0, 3.0]  # Width, length, height in meters
 SOURCE_RANGE = [0.5, 4.5]          # Min/max source positions
 ```
+
+3. The system leverages Pydantic settings to load the `.env` file. Modify key parameters in the `.env` file without touching the code.
 
 ## Usage
 

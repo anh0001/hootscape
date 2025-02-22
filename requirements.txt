@@ -3,6 +3,7 @@ python-dotenv
 pyaudio
 aiohttp
 pydantic
+pydantic-settings
 
 # HootScape’s voice integration and pipeline services, with extras for OpenAI and Deepgram support.
 pipecat-ai[openai,deepgram]

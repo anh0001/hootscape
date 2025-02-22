@@ -15,6 +15,7 @@ from pydantic import Field
 from api.owl_controller import handle_owl_command  # new unified endpoint
 from typing import Optional
 from robot.owl_controller import OwlController  # already imported
+from config.settings import settings  # new import for settings
 
 # Define a custom TransportParams model including output_device_index.
 class CustomTransportParams(BaseTransportParams):
@@ -33,7 +34,8 @@ async def start_http_server(event_bus, owl):
     # Use AppRunner and TCPSite for non-blocking startup
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', 9123)
+    # Use settings for host and port
+    site = web.TCPSite(runner, settings.http_server_host, settings.http_server_port)
     await site.start()
     # Keep server running
     while True:
@@ -91,8 +93,12 @@ async def main():
             await task.queue_frame(TextFrame(text))
         event_bus.subscribe("text_received", process_text)
 
-        # Instantiate the OwlController (ensure port matches your setup)
-        owl = OwlController(port='/dev/tty.usbserial-AB0MHXVL')
+        # Instantiate the OwlController using settings
+        owl = OwlController(
+            port=settings.robot_port,
+            baudrate=settings.robot_baudrate,
+            timeout=settings.robot_timeout
+        )
 
         # Start the HTTP text receiver server and owl command server concurrently.
         http_task = asyncio.create_task(start_http_server(event_bus, owl))
