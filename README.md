@@ -112,15 +112,39 @@ python main.py
    - "Give me a hint"
    - "Is the baby owl nearby?"
 
-## HTTP Text Input
+## HTTP Command Input
 
-The system listens for text via an HTTP POST request to its /text endpoint (default port 8080). 
-Send a JSON payload containing a "text" field:
+The system now accepts combined speech and movement commands via an HTTP POST request to the /owl/command endpoint on port 9123. The JSON payload should include two main sections:
+	•	speech:  
+        Contains the text to be converted to speech using ElevenLabs TTS, along with optional parameters for rate and pitch.
+	•	movement:  
+        Specifies the movement type, duration (in milliseconds), and whether the movement should loop. The movement type is mapped as follows:
+              •	1: Nodding
+              •	2: Rotating
+              •	3: Upright Posture
+              •	4: Backward Posture
+              •	5: Tilting
+
+**Example:**
+
 ```bash
-curl -X POST -H "Content-Type: application/json" -d '{"text": "Hello, system!"}' http://localhost:8080/text
+curl -X POST -H "Content-Type: application/json" -d '{
+  "speech": {
+    "text": "Hello, hootscape!",
+    "rate": 1.0,
+    "pitch": 1.0
+  },
+  "movement": {
+    "type": 1,
+    "duration": 3000,
+    "loop": false
+  }
+}' http://localhost:9123/owl/command
 ```
-NOTE: The text must be closed by '!' character.
-When received, the system publishes a "text_received" event and processes the text, converting it to speech using ElevenLabs TTS.
+
+NOTE: The speech text must end with a character '!'. The text will be buffered when there is no '!' character.
+
+When this request is received, the system publishes a text_received event (for the TTS processing) and executes the corresponding movement based on the provided movement type.
 
 ## Development
 
