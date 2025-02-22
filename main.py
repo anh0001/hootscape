@@ -1,5 +1,6 @@
 import os
 import asyncio
+import signal
 from dotenv import load_dotenv
 from aiohttp import web, ClientSession
 from core.event_bus import EventBus
@@ -31,7 +32,7 @@ async def start_http_server(event_bus):
     # Use AppRunner and TCPSite for non-blocking startup
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', 8080)
+    site = web.TCPSite(runner, '0.0.0.0', 9123)
     await site.start()
     # Keep server running
     while True:
@@ -65,6 +66,15 @@ async def poll_owl_movement(session, owl: OwlController):
         except Exception as e:
             print(f"[ERROR] Failed to poll owl movement: {e}")
         await asyncio.sleep(5)
+
+# Update shutdown() to remove loop.stop() and use shutdown_event
+async def shutdown(tasks, session, shutdown_event):
+    print("Initiating graceful shutdown...")
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    await session.close()  # cleanup network session if needed
+    shutdown_event.set()  # signal that shutdown is complete
 
 async def main():
     # Initialize event bus and create an aiohttp session
@@ -113,15 +123,21 @@ async def main():
         owl = OwlController(port='/dev/tty.usbserial-AB0MHXVL')
 
         # Start the HTTP text receiver server, pipeline runner, and owl movement polling concurrently
-        asyncio.create_task(start_http_server(event_bus))
-        asyncio.create_task(runner.run(task))
-        asyncio.create_task(poll_owl_movement(session, owl))
-        
+        http_task = asyncio.create_task(start_http_server(event_bus))
+        pipeline_task = asyncio.create_task(runner.run(task))
+        poll_task = asyncio.create_task(poll_owl_movement(session, owl))
+        tasks = [http_task, pipeline_task, poll_task]
+
+        shutdown_event = asyncio.Event()  # Instantiate shutdown event
+
+        loop = asyncio.get_running_loop()
+        # Update signal handlers to call the new shutdown() without stopping the loop.
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(tasks, session, shutdown_event)))
+
         try:
-            while True:
-                await asyncio.sleep(0.1)
-        except KeyboardInterrupt:
-            # Cleanup if necessary
+            await shutdown_event.wait()  # Wait until shutdown is triggered.
+        except asyncio.CancelledError:
             pass
 
 if __name__ == "__main__":
