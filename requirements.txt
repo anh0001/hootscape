@@ -9,3 +9,5 @@ pipecat-ai[openai,deepgram]
 
 # Spatial audio processing for the immersive soundscape.
 # spatialscaper
+
+pyserial
