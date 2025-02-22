@@ -119,6 +119,7 @@ Send a JSON payload containing a "text" field:
 ```bash
 curl -X POST -H "Content-Type: application/json" -d '{"text": "Hello, system!"}' http://localhost:8080/text
 ```
+NOTE: The text must be closed by '!' character.
 When received, the system publishes a "text_received" event and processes the text, converting it to speech using ElevenLabs TTS.
 
 ## Development
