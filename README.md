@@ -31,23 +31,23 @@ HootScape creates a unique, multi-sensory interactive experience that blurs the 
 
 ### 1. Setup Virtual Environment
 ```bash
-python3 -m venv hootscape-env
-source hootscape-env/bin/activate
+conda create --prefix hootscape-env python=3.11
+conda activate ./hootscape-env
 ```
 
-### 2. Install Python Dependencies
+### 2. Install System Dependencies (Ubuntu 22.04)
+```bash
+sudo apt update
+sudo apt install portaudio
+```
+
+### 3. Install Python Dependencies
 ```bash
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 ```bash
 cp dot-env.template .env
-```
-
-### 3. Install System Dependencies (Ubuntu 22.04)
-```bash
-sudo apt update
-sudo apt install portaudio19-dev
 ```
 
 ### 4. Set Up Audio Assets
