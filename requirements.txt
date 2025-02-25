@@ -15,3 +15,4 @@ pipecat-ai[openai,deepgram]
 pyserial
 gTTS
 pydub
+pygame
