@@ -20,11 +20,12 @@ async def handle_owl_command(request):
         if not owl:
             return web.Response(text="Owl not initialized", status=500)
         movement_map = {
-            1: owl.nodding,
-            2: owl.rotating,
-            3: owl.upright_posture,
-            4: owl.backward_posture,
-            5: owl.tilting,
+            1: owl.tilt_front,
+            2: owl.tilt_back,
+            3: owl.rotate_right,
+            4: owl.rotate_left,
+            5: owl.tilt_right,
+            6: owl.tilt_left,
         }
         move_func = movement_map.get(move_type)
         if move_func:
