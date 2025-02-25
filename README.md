@@ -136,21 +136,28 @@ The system now accepts combined speech and movement commands via an HTTP POST re
 ```bash
 curl -X POST -H "Content-Type: application/json" -d '{
   "speech": {
-    "text": "Hello, hootscape!",
+    "text": "Hello, HootScape!",
     "rate": 1.0,
     "pitch": 1.0
   },
-  "movement": {
-    "type": 1,
-    "duration": 3000,
-    "loop": false
-  }
+  "movements": [
+    {"type": 5, "duration": 1},
+    {"type": 6, "duration": 1},
+    {"type": 5, "duration": 1},
+    {"type": 6, "duration": 1},
+    {"type": 5, "duration": 1},
+    {"type": 6, "duration": 1}
+  ]
 }' http://localhost:9123/owl/command
 ```
 
 NOTE: The speech text must end with a character '!'. The text will be buffered when there is no '!' character.
 
 When this request is received, the system publishes a text_received event (for the TTS processing) and executes the corresponding movement based on the provided movement type.
+
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{"macro": "happy"}' http://localhost:9123/owl/command
+```
 
 ## Development
 
