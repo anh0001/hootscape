@@ -39,6 +39,7 @@ conda activate ./hootscape-env
 ```bash
 sudo apt update
 sudo apt install portaudio19-dev
+sudo apt install ffmpeg
 ```
 
 ### 3. Install Python Dependencies

@@ -1,7 +1,7 @@
 from io import BytesIO
 from gtts import gTTS
 import pydub
-from pipecat.frames.frames import TextFrame, AudioFrame
+from pipecat.frames.frames import TextFrame, TTSAudioRawFrame
 from pipecat.services.base import TTSServiceBase
 from pydantic import BaseModel
 from enum import Enum
@@ -33,7 +33,7 @@ class GttsTTSService(TTSServiceBase):
         wav_fp.seek(0)
         return wav_fp.read()
 
-    async def __call__(self, frame: TextFrame) -> AudioFrame:
+    async def __call__(self, frame: TextFrame) -> TTSAudioRawFrame:
         text = frame.text
         audio_data = self.synthesize(text)
-        return AudioFrame(audio_data)
+        return TTSAudioRawFrame(audio_data)
