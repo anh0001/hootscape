@@ -38,7 +38,7 @@ conda activate ./hootscape-env
 ### 2. Install System Dependencies (Ubuntu 22.04)
 ```bash
 sudo apt update
-sudo apt install portaudio
+sudo apt install portaudio19-dev
 ```
 
 ### 3. Install Python Dependencies
