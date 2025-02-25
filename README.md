@@ -42,7 +42,23 @@ sudo apt install portaudio19-dev
 sudo apt install ffmpeg
 ```
 
-### 3. Install Python Dependencies
+### 3. Configure Network Settings
+To set a fixed IP address for the system:
+
+```bash
+# Replace YourWiFiConnectionName with your connection name
+# You can find it using: nmcli connection show
+sudo nmcli connection modify "YourWiFiConnectionName" \
+    ipv4.addresses 192.168.1.84/24 \
+    ipv4.gateway 192.168.1.1 \
+    ipv4.dns "8.8.8.8 8.8.4.4" \
+    ipv4.method manual
+
+# Apply the changes
+sudo nmcli connection up "YourWiFiConnectionName"
+```
+
+### 4. Install Python Dependencies
 ```bash
 pip install --upgrade pip
 pip install -r requirements.txt
@@ -51,10 +67,10 @@ pip install -r requirements.txt
 cp dot-env.template .env
 ```
 
-### 4. Configure Environment Settings
+### 5. Configure Environment Settings
 Edit the `.env` file to set your HTTP server and robot parameters.
 
-### 5. Set Up Audio Assets
+### 6. Set Up Audio Assets
 ```bash
 mkdir -p audio/assets/forest audio/assets/owls
 # Add your audio files:
