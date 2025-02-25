@@ -108,7 +108,7 @@ if __name__ == "__main__":
     try:
         owl = OwlController(port='/dev/tty.usbserial-AB0MHXVL')
         owl.toggle_torque(True)
-        for movement in [owl.nodding, owl.rotating, owl.upright_posture, owl.backward_posture, owl.tilting]:
+        for movement in [owl.tilt_front, owl.tilt_back, owl.rotate_right, owl.rotate_left, owl.tilt_right, owl.tilt_left]:
             movement()
             time.sleep(1)
         owl.toggle_torque(False)

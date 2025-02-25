@@ -124,11 +124,12 @@ The system now accepts combined speech and movement commands via an HTTP POST re
         Contains the text to be converted to speech using ElevenLabs TTS, along with optional parameters for rate and pitch.
 	•	movement:  
         Specifies the movement type, duration (in milliseconds), and whether the movement should loop. The movement type is mapped as follows:
-              •	1: Nodding
-              •	2: Rotating
-              •	3: Upright Posture
-              •	4: Backward Posture
-              •	5: Tilting
+              •	1: Tilt Front
+              •	2: Tilt Back
+              •	3: Rotate Right
+              •	4: Rotate Left
+              •	5: Tilt Right
+              •	6: Tilt Left
 
 **Example:**
 
