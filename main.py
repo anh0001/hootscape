@@ -12,7 +12,7 @@ from pipecat.services.elevenlabs import ElevenLabsTTSService, Language
 from pipecat.transports.local.audio import LocalAudioTransport
 from pipecat.transports.base_transport import TransportParams as BaseTransportParams
 from pydantic import Field
-from api.owl_controller import handle_owl_command  # new unified endpoint
+from api.owl_api_controller import handle_owl_command  # new unified endpoint
 from typing import Optional
 from robot.owl_controller import OwlController  # already imported
 from config.settings import settings  # new import for settings
