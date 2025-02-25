@@ -16,12 +16,13 @@ async def process_text(text: str, tts_service: TTSService):
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, tts_service.play_text, text)
 
-async def start_http_server(event_bus, owl):
-    # Setup aiohttp app with the event bus in app context
+async def start_http_server(event_bus, owl, tts_service):
+    # Setup aiohttp app with the event bus and tts service in app context
     app = web.Application()
     app["event_bus"] = event_bus
-    app["owl"] = owl  # add the owl to the app context
-    app.router.add_post('/owl/command', handle_owl_command)  # new unified endpoint
+    app["owl"] = owl
+    app["tts_service"] = tts_service  # NEW: expose TTSService to the request handlers
+    app.router.add_post('/owl/command', handle_owl_command)  # unified endpoint
     
     # Use AppRunner and TCPSite for non-blocking startup
     runner = web.AppRunner(app)
@@ -61,7 +62,7 @@ async def main():
             timeout=settings.robot_timeout
         )
         
-        http_task = asyncio.create_task(start_http_server(event_bus, owl))
+        http_task = asyncio.create_task(start_http_server(event_bus, owl, tts_service))  # updated call
         tasks = [http_task]
         
         shutdown_event = asyncio.Event()

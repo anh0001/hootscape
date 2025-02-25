@@ -25,13 +25,26 @@ async def execute_movement_sequence(owl, movements):
 
 async def handle_owl_command(request):
     data = await request.json()
-    # Process speech command if provided.
+    loop = asyncio.get_running_loop()
+    
+    # Combined execution if both speech and movements are provided.
+    if "speech" in data and "movements" in data:
+        speech_text = data["speech"].get("text", "")
+        movements = data["movements"]
+        tasks = []
+        if speech_text:
+            tasks.append(loop.run_in_executor(None, request.app["tts_service"].play_text, speech_text))
+        tasks.append(execute_movement_sequence(request.app["owl"], movements))
+        await asyncio.gather(*tasks)
+        return web.json_response({"status": "commands executed concurrently"})
+        
+    # Process speech command if provided alone.
     if "speech" in data:
         speech = data["speech"]
         text = speech.get("text", "")
         if text:
-            # Publish text for TTS via event bus.
             await request.app["event_bus"].publish("text_received", text)
+    
     # Process sequence of movements if provided.
     if "movements" in data:
         movements = data["movements"]
@@ -55,7 +68,6 @@ async def handle_owl_command(request):
     elif "movement" in data:
         movement = data["movement"]
         move_type = movement.get("type")
-        loop = asyncio.get_running_loop()
         movement_map = {
             1: request.app["owl"].tilt_front,
             2: request.app["owl"].tilt_back,
