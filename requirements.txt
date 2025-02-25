@@ -12,3 +12,5 @@ pipecat-ai[openai,deepgram]
 # spatialscaper
 
 pyserial
+gTTS
+pydub

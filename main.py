@@ -8,7 +8,7 @@ from pipecat.frames.frames import TextFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
-from pipecat.services.elevenlabs import ElevenLabsTTSService, Language
+from audio.gtts_service import GttsTTSService, Language
 from pipecat.transports.local.audio import LocalAudioTransport
 from pipecat.transports.base_transport import TransportParams as BaseTransportParams
 from pydantic import Field
@@ -55,8 +55,6 @@ async def main():
     event_bus = EventBus()
     async with ClientSession() as session:
         # Retrieve API keys and audio device index from env
-        elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
-        elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
         device_index_env = os.getenv("AUDIO_DEVICE_INDEX")
         audio_device_index = int(device_index_env) if device_index_env else None
 
@@ -67,19 +65,15 @@ async def main():
             output_device_index=audio_device_index
         )
         transport = LocalAudioTransport(transport_params)
-        tts = ElevenLabsTTSService(
-            aiohttp_session=session,
-            api_key=elevenlabs_api_key,
-            voice_id=elevenlabs_voice_id,
-            sample_rate=24000,
-            params=ElevenLabsTTSService.InputParams(
+        
+        # Replace ElevenLabs with gTTS
+        tts = GttsTTSService(
+            params=GttsTTSService.InputParams(
                 language=Language.EN,
-                stability=0.7,
-                similarity_boost=0.8,
-                style=0.5,
-                use_speaker_boost=True
+                sample_rate=24000
             )
         )
+
         # Build the pipeline (TTS converts text to audio, transport plays audio)
         pipeline = Pipeline([
             tts,
