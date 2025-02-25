@@ -117,21 +117,47 @@ python main.py
    - "Give me a hint"
    - "Is the baby owl nearby?"
 
-## HTTP Command Input
+## API Command Format
 
-The system now accepts combined speech and movement commands via an HTTP POST request to the /owl/command endpoint on port 9123. The JSON payload should include two main sections:
-	•	speech:  
-        Contains the text to be converted to speech using ElevenLabs TTS, along with optional parameters for rate and pitch.
-	•	movement:  
-        Specifies the movement type, duration (in milliseconds), and whether the movement should loop. The movement type is mapped as follows:
-              •	1: Tilt Front
-              •	2: Tilt Back
-              •	3: Rotate Right
-              •	4: Rotate Left
-              •	5: Tilt Right
-              •	6: Tilt Left
+The system accepts commands via HTTP POST requests to `/owl/command` on port 9123. The endpoint supports several payload formats:
 
-**Example:**
+### 1. Speech Command
+
+Send text-to-speech commands with optional rate and pitch parameters. Text must end with '!' for immediate processing.
+
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{
+  "speech": {
+    "text": "Hello, HootScape!",
+    "rate": 1.0,
+    "pitch": 1.0
+  }
+}' http://localhost:9123/owl/command
+```
+
+### 2. Movement Sequence
+
+Execute a series of movements. Movement types:
+- 1: Tilt Front
+- 2: Tilt Back
+- 3: Rotate Right
+- 4: Rotate Left
+- 5: Tilt Right
+- 6: Tilt Left
+
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{
+  "movements": [
+    {"type": 5, "duration": 1},
+    {"type": 6, "duration": 1},
+    {"type": 5, "duration": 1}
+  ]
+}' http://localhost:9123/owl/command
+```
+
+### 3. Combined Speech and Movement
+
+Combine TTS and movement commands in a single request:
 
 ```bash
 curl -X POST -H "Content-Type: application/json" -d '{
@@ -142,21 +168,19 @@ curl -X POST -H "Content-Type: application/json" -d '{
   },
   "movements": [
     {"type": 5, "duration": 1},
-    {"type": 6, "duration": 1},
-    {"type": 5, "duration": 1},
-    {"type": 6, "duration": 1},
-    {"type": 5, "duration": 1},
     {"type": 6, "duration": 1}
   ]
 }' http://localhost:9123/owl/command
 ```
 
-NOTE: The speech text must end with a character '!'. The text will be buffered when there is no '!' character.
+### 4. Macro Commands
 
-When this request is received, the system publishes a text_received event (for the TTS processing) and executes the corresponding movement based on the provided movement type.
+Execute predefined movement sequences using named macros:
 
 ```bash
-curl -X POST -H "Content-Type: application/json" -d '{"macro": "happy"}' http://localhost:9123/owl/command
+curl -X POST -H "Content-Type: application/json" -d '{
+  "macro": "happy"
+}' http://localhost:9123/owl/command
 ```
 
 ## Development
