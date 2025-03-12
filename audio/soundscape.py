@@ -6,6 +6,7 @@ import time
 import threading
 import logging
 from openal import al, alc
+from ctypes import c_float
 
 logger = logging.getLogger("soundscape")
 
@@ -13,6 +14,10 @@ class SoundscapeManager:
     def __init__(self, event_bus, assets_path='audio/assets'):
         self.event_bus = event_bus
         self.assets_path = assets_path
+        
+        # Initialize thread reference early to avoid potential AttributeError
+        self.update_thread = None
+        self.running = False
         
         # Room dimensions in meters
         self.room_dimensions = [5.0, 4.0, 3.0]
@@ -33,10 +38,6 @@ class SoundscapeManager:
         self.sources = {}
         self.buffers = {}
         self.playing_sources = set()
-        
-        # Thread for updating listener position
-        self.running = False
-        self.update_thread = None
         
     def _initialize_openal(self):
         """Initialize OpenAL context"""
@@ -63,7 +64,8 @@ class SoundscapeManager:
             # Set listener orientation (facing forward -Z axis, up +Y axis)
             orientation = [0.0, 0.0, -1.0,  # Forward vector (looking into -Z)
                            0.0, 1.0, 0.0]   # Up vector (+Y)
-            al.alListenerfv(al.AL_ORIENTATION, (al.ALfloat * 6)(*orientation))
+            # Use c_float instead of al.ALfloat
+            al.alListenerfv(al.AL_ORIENTATION, (c_float * 6)(*orientation))
             
             logger.info("OpenAL initialized successfully")
         except Exception as e:
@@ -337,5 +339,10 @@ class SoundscapeManager:
     
     def __del__(self):
         """Destructor to ensure proper cleanup"""
-        self.stop_update_thread()
-        self.cleanup()
+        try:
+            if hasattr(self, 'running') and self.running:
+                self.stop_update_thread()
+            if hasattr(self, 'context') or hasattr(self, 'device'):
+                self.cleanup()
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
