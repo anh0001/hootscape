@@ -83,9 +83,13 @@ async def startup_sequence(owl_controller, soundscape, event_bus, tts_service):
     """
     Execute a welcoming startup sequence
     """
-    # Play a welcoming forest ambience
-    forest_audio = await soundscape.create_forest_ambience()
-    # In a real implementation, play this audio...
+    # Start the forest ambience - now using the OpenAL implementation
+    forest_sources = await soundscape.create_forest_ambience()
+    logger.info(f"Started forest ambience with {len(forest_sources)} sound sources")
+    
+    # Play a mother owl sound as part of the welcome
+    owl_position = [2.5, 3.0, 2.0]  # Position in the virtual room
+    owl_source = await soundscape.play_mother_owl_sound(owl_position)
     
     # Make owl greet the user
     welcome_movements = [
@@ -100,7 +104,10 @@ async def startup_sequence(owl_controller, soundscape, event_bus, tts_service):
                   "health monitoring, and to keep you company. Just say 'Hey Owl' to get my attention."
     await process_text(welcome_text, tts_service)
 
-async def shutdown(tasks, session, voice_system, shutdown_event):
+async def shutdown(tasks, session, voice_system, soundscape, shutdown_event):
+    """
+    Gracefully shut down all components
+    """
     logger.info("Initiating graceful shutdown...")
     for task in tasks:
         task.cancel()
@@ -111,6 +118,11 @@ async def shutdown(tasks, session, voice_system, shutdown_event):
     
     if session:
         await session.close()
+    
+    # Clean up soundscape resources
+    if soundscape:
+        soundscape.stop_update_thread()
+        soundscape.cleanup()
         
     shutdown_event.set()
 
@@ -169,7 +181,7 @@ async def main():
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(
                 sig, 
-                lambda: asyncio.create_task(shutdown(tasks, session, voice_system, shutdown_event))
+                lambda: asyncio.create_task(shutdown(tasks, session, voice_system, soundscape, shutdown_event))
             )
         
         try:
