@@ -107,6 +107,29 @@ brew install openal-soft portaudio
 pip install -r requirements.txt
 ```
 
+### Troubleshooting OpenAL on macOS
+
+If you encounter an error such as:
+```
+openal.library_loader.ExternalLibraryError: OpenAL library couldn't be found
+```
+
+Even after installing openal-soft via Homebrew, try the following steps:
+
+1. **Check Architecture Consistency:**
+   Ensure your Python interpreter's architecture (e.g., arm64 or x86_64) matches that of the Homebrew-installed openal-soft. Check your Python's architecture by running:
+   ```bash
+   file $(which python3)
+   ```
+   Verify it aligns with the library (found in /opt/homebrew/opt/openal-soft/lib).
+
+2. **Create a Symlink:**
+   Create a symbolic link in a standard library directory:
+   ```bash
+   sudo ln -s /opt/homebrew/opt/openal-soft/lib/libopenal.dylib /usr/local/lib/libopenal.dylib
+   ```
+   This places the OpenAL library where the system's dynamic linker will find it automatically.
+
 ## Project Structure
 
 ```
