@@ -6,8 +6,7 @@ pydantic
 pydantic-settings
 
 # HootScape's voice integration and pipeline services, with extras for OpenAI and Deepgram support.
-pipecat
-pipecat-ai[openai,deepgram]
+pipecat-ai[openai,deepgram,whisper]
 
 # Spatial audio processing using PyOpenAL instead of spatialscaper
 PyOpenAL

@@ -8,24 +8,47 @@ import logging
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
-from pipecat.services.base_service import BaseService
-from pipecat.frames.frames import AudioFrame, TextFrame
+from pipecat.frames.frames import TextFrame
 from pipecat.transports.local.audio import LocalAudioTransport
 from pipecat.transports.base_transport import TransportParams
-from pipecat.services.whisper import WhisperService
-from pydantic import Field
+from pipecat.services.whisper import WhisperSTTService, Model
+from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
+from pydantic import Field, BaseModel
 
 logger = logging.getLogger("voice_system")
 
+# Create our own TextProcessor class based on PipelineTask
+class TextProcessor(PipelineTask):
+    """Base class for text processing tasks in the pipeline."""
+    
+    # Define parameters without nested InputParams class
+    def __init__(self, params=None):
+        super().__init__(params)
+    
+    async def process_frame(self, frame):
+        """Override this method in subclasses to process text frames."""
+        return frame
+
+# Define parameters for HealthcareNLP separately
+class HealthcareNLPParams(BaseModel):
+    command_handler: Optional[Callable] = Field(default=None, description="Callback for handling commands")
+
 # Simple NLP processor for healthcare commands
-class HealthcareNLP(BaseService):
+class HealthcareNLP(TextProcessor):
     """
     Simple NLP processor for healthcare commands optimized for elderly users.
     """
     
-    class InputParams(BaseService.InputParams):
-        command_handler: Optional[Callable] = Field(default=None, description="Callback for handling commands")
-        
+    def __init__(self, params: HealthcareNLPParams = None):
+        super().__init__(params)
+        self.params = params or HealthcareNLPParams()
+        # Initialize MarkdownTextFilter for text preprocessing if needed
+        self.text_filter = MarkdownTextFilter(
+            enable_text_filter=True,
+            filter_code=True,
+            filter_tables=True
+        )
+    
     async def process_frame(self, frame):
         if not isinstance(frame, TextFrame):
             return frame
@@ -194,16 +217,16 @@ class VoiceSystem:
         # Create an async HTTP session for WhisperService
         self.session = aiohttp.ClientSession()
         
-        # Create whisper service for speech recognition
-        # Using local Whisper model for privacy and reliability
-        whisper_service = WhisperService(
-            model_name="tiny",  # Use small model for speed
-            language="en"       # Set to appropriate language
+        # Use WhisperSTTService instead of WhisperService with CPU configuration
+        whisper_service = WhisperSTTService(
+            model=Model.DISTIL_MEDIUM_EN,  # Using a pre-trained distilled model optimized for English
+            device="cpu",                  # Explicitly set to CPU mode
+            no_speech_prob=0.4             # Threshold for detecting no speech
         )
         
         # Create NLP service for intent classification
         nlp_service = HealthcareNLP(
-            HealthcareNLP.InputParams(command_handler=self.handle_command)
+            HealthcareNLPParams(command_handler=self.handle_command)
         )
         
         # Create the pipeline
