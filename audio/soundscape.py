@@ -6,7 +6,7 @@ import time
 import threading
 import logging
 from openal import al, alc
-from ctypes import c_float
+from ctypes import c_float, c_uint, c_int, pointer, POINTER
 
 logger = logging.getLogger("soundscape")
 
@@ -79,7 +79,7 @@ class SoundscapeManager:
         
         # Load forest ambient sounds
         forest_path = os.path.join(self.assets_path, 'forest')
-        if os.path.exists(forest_path):
+        if (os.path.exists(forest_path)):
             for sound_file in os.listdir(forest_path):
                 if sound_file.endswith(('.wav', '.ogg', '.mp3')):
                     name = os.path.splitext(sound_file)[0]
@@ -89,7 +89,7 @@ class SoundscapeManager:
             
         # Load owl sound effects
         owls_path = os.path.join(self.assets_path, 'owls')
-        if os.path.exists(owls_path):
+        if (os.path.exists(owls_path)):
             for sound_file in os.listdir(owls_path):
                 if sound_file.endswith(('.wav', '.ogg', '.mp3')):
                     name = os.path.splitext(sound_file)[0]
@@ -106,7 +106,14 @@ class SoundscapeManager:
         
         try:
             # Read audio file
-            data, sample_rate = sf.read(sound_file, dtype='float32')
+            try:
+                data, sample_rate = sf.read(sound_file, dtype='float32')
+            except Exception as e:
+                logger.error(f"Error reading sound file {sound_file}: {e}")
+                logger.info(f"Attempting to use alternative method to load {sound_file}")
+                # Here you could implement alternative loading methods
+                # For now we'll just fail gracefully
+                return None
             
             # Convert to mono if stereo
             if len(data.shape) > 1 and data.shape[1] > 1:
@@ -115,19 +122,20 @@ class SoundscapeManager:
             # Convert to appropriate format for OpenAL
             data = (data * 32767).astype(np.int16)
             
-            # Create buffer
-            buffer_id = al.alGenBuffers(1)
+            # Create buffer - properly using output parameter
+            buffer_id = c_uint(0)
+            al.alGenBuffers(1, pointer(buffer_id))
             
             # Determine format (only mono for spatial audio)
             al_format = al.AL_FORMAT_MONO16
             
             # Fill buffer with audio data
-            al.alBufferData(buffer_id, al_format, data.tobytes(), 
-                          data.shape[0], sample_rate)
+            al.alBufferData(buffer_id.value, al_format, data.tobytes(), 
+                          data.nbytes, sample_rate)
             
             # Store buffer ID
-            self.buffers[sound_file] = buffer_id
-            return buffer_id
+            self.buffers[sound_file] = buffer_id.value
+            return buffer_id.value
             
         except Exception as e:
             logger.error(f"Error creating buffer for {sound_file}: {e}")
@@ -136,24 +144,25 @@ class SoundscapeManager:
     def _create_source(self, buffer_id, position, gain=1.0, pitch=1.0, loop=False):
         """Create an OpenAL source"""
         try:
-            # Generate source
-            source_id = al.alGenSources(1)
+            # Generate source - properly using output parameter
+            source_id = c_uint(0)
+            al.alGenSources(1, pointer(source_id))
             
             # Set source properties
-            al.alSourcei(source_id, al.AL_BUFFER, buffer_id)
-            al.alSourcef(source_id, al.AL_GAIN, gain)
-            al.alSourcef(source_id, al.AL_PITCH, pitch)
-            al.alSourcei(source_id, al.AL_LOOPING, al.AL_TRUE if loop else al.AL_FALSE)
+            al.alSourcei(source_id.value, al.AL_BUFFER, buffer_id)
+            al.alSourcef(source_id.value, al.AL_GAIN, gain)
+            al.alSourcef(source_id.value, al.AL_PITCH, pitch)
+            al.alSourcei(source_id.value, al.AL_LOOPING, al.AL_TRUE if loop else al.AL_FALSE)
             
             # Set position
-            al.alSource3f(source_id, al.AL_POSITION, *position)
+            al.alSource3f(source_id.value, al.AL_POSITION, *position)
             
             # Set distance properties
-            al.alSourcef(source_id, al.AL_REFERENCE_DISTANCE, 1.0)
-            al.alSourcef(source_id, al.AL_MAX_DISTANCE, 10.0)
-            al.alSourcef(source_id, al.AL_ROLLOFF_FACTOR, 1.0)
+            al.alSourcef(source_id.value, al.AL_REFERENCE_DISTANCE, 1.0)
+            al.alSourcef(source_id.value, al.AL_MAX_DISTANCE, 10.0)
+            al.alSourcef(source_id.value, al.AL_ROLLOFF_FACTOR, 1.0)
             
-            return source_id
+            return source_id.value
             
         except Exception as e:
             logger.error(f"Error creating source: {e}")
@@ -233,8 +242,8 @@ class SoundscapeManager:
             sources_to_remove = []
             for source_id in list(self.sources.keys()):
                 if source_id not in self.playing_sources:
-                    state = al.ALint(0)
-                    al.alGetSourcei(source_id, al.AL_SOURCE_STATE, state)
+                    state = c_int(0)  # Changed from c_uint to c_int
+                    al.alGetSourcei(source_id, al.AL_SOURCE_STATE, pointer(state))
                     if state.value != al.AL_PLAYING:
                         sources_to_remove.append(source_id)
             
@@ -242,8 +251,10 @@ class SoundscapeManager:
             for source_id in sources_to_remove:
                 try:
                     del self.sources[source_id]
-                    al.alDeleteSources(1, [source_id])
-                except:
+                    source_id_c = c_uint(source_id)
+                    al.alDeleteSources(1, pointer(source_id_c))
+                except Exception as e:
+                    logger.error(f"Error cleaning up source: {e}")
                     pass
             
             time.sleep(0.1)
@@ -261,8 +272,10 @@ class SoundscapeManager:
         for source_id in list(self.sources.keys()):
             try:
                 al.alSourceStop(source_id)
-                al.alDeleteSources(1, [source_id])
-            except:
+                source_id_c = c_uint(source_id)
+                al.alDeleteSources(1, pointer(source_id_c))
+            except Exception as e:
+                logger.error(f"Error deleting source: {e}")
                 pass
         self.sources.clear()
         self.playing_sources.clear()
@@ -270,8 +283,10 @@ class SoundscapeManager:
         # Delete all buffers
         for buffer_id in list(self.buffers.values()):
             try:
-                al.alDeleteBuffers(1, [buffer_id])
-            except:
+                buffer_id_c = c_uint(buffer_id)
+                al.alDeleteBuffers(1, pointer(buffer_id_c))
+            except Exception as e:
+                logger.error(f"Error deleting buffer: {e}")
                 pass
         self.buffers.clear()
         
