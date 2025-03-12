@@ -90,6 +90,23 @@ mkdir -p audio/assets/forest audio/assets/owls
 # - audio/assets/owls/ (owl sound effects in WAV format)
 ```
 
+### Installation Notes
+
+To install PyOpenAL and the required dependencies:
+
+#### On Ubuntu/Linux:
+```bash
+sudo apt update
+sudo apt install libopenal-dev portaudio19-dev
+pip install -r requirements.txt
+```
+
+#### On macOS:
+```bash
+brew install openal-soft portaudio
+pip install -r requirements.txt
+```
+
 ## Project Structure
 
 ```

@@ -5,14 +5,20 @@ aiohttp
 pydantic
 pydantic-settings
 
-# HootScape’s voice integration and pipeline services, with extras for OpenAI and Deepgram support.
+# HootScape's voice integration and pipeline services, with extras for OpenAI and Deepgram support.
 pipecat
 pipecat-ai[openai,deepgram]
 
-# Spatial audio processing for the immersive soundscape.
-# spatialscaper
+# Spatial audio processing using PyOpenAL instead of spatialscaper
+PyOpenAL
+soundfile
+numpy
+aiofiles
 
+# Robot control
 pyserial
+
+# Audio playback and TTS
 gTTS
 pydub
 pygame
