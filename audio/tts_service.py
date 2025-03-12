@@ -10,7 +10,7 @@ class TTSService:
             pygame.mixer.init()
         self._lock = threading.Lock()
 
-    def play_text(self, text: str, lang: str = "ja"):
+    def play_text(self, text: str, lang: str = "en"):
         """
         Convert text to speech and play it using pygame mixer.
         """

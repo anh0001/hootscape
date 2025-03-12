@@ -21,17 +21,17 @@ logger = logging.getLogger("voice_system")
 class TextProcessor(PipelineTask):
     """Base class for text processing tasks in the pipeline."""
     
-    # Define parameters without nested InputParams class
-    def __init__(self, params=None):
-        super().__init__(params)
+    def __init__(self, pipeline=None):
+        super().__init__(pipeline)
+        self._parent = None
+    
+    def set_parent(self, parent):
+        """Store the parent component for proper pipeline linking."""
+        self._parent = parent
     
     async def process_frame(self, frame):
         """Override this method in subclasses to process text frames."""
         return frame
-
-# Define parameters for HealthcareNLP separately
-class HealthcareNLPParams(BaseModel):
-    command_handler: Optional[Callable] = Field(default=None, description="Callback for handling commands")
 
 # Simple NLP processor for healthcare commands
 class HealthcareNLP(TextProcessor):
@@ -39,14 +39,23 @@ class HealthcareNLP(TextProcessor):
     Simple NLP processor for healthcare commands optimized for elderly users.
     """
     
-    def __init__(self, params: HealthcareNLPParams = None):
-        super().__init__(params)
-        self.params = params or HealthcareNLPParams()
+    class InputParams(BaseModel):
+        command_handler: Optional[Callable] = Field(default=None, description="Callback for handling commands")
+    
+    def __init__(self, params: InputParams = None, pipeline=None, **kwargs):
+        # Create parameters if none provided
+        self.nlp_params = params or self.InputParams()
+        
+        # Pass the pipeline to the parent class constructor
+        super().__init__(pipeline)
+        
         # Initialize MarkdownTextFilter for text preprocessing if needed
         self.text_filter = MarkdownTextFilter(
-            enable_text_filter=True,
-            filter_code=True,
-            filter_tables=True
+            MarkdownTextFilter.InputParams(
+                enable_text_filter=True,
+                filter_code=True,
+                filter_tables=True
+            )
         )
     
     async def process_frame(self, frame):
@@ -134,9 +143,9 @@ class HealthcareNLP(TextProcessor):
         logger.info(f"Processed intent: {intent}")
         
         # If there's a command handler, call it
-        if self.params.command_handler:
+        if self.nlp_params.command_handler:
             try:
-                await self.params.command_handler(result)
+                await self.nlp_params.command_handler(result)
             except Exception as e:
                 logger.error(f"Error in command handler: {e}")
         
@@ -203,55 +212,89 @@ class VoiceSystem:
     
     async def setup_pipeline(self):
         """Set up the voice processing pipeline using Pipecat."""
-        import aiohttp
-        
-        # Create the transport for audio input with appropriate settings for elderly users
-        transport_params = TransportParams(
-            audio_in_enabled=True,
-            audio_in_sample_rate=16000,
-            audio_in_channels=1,
-            audio_out_enabled=False
-        )
-        self.transport = LocalAudioTransport(transport_params)
-        
-        # Create an async HTTP session for WhisperService
-        self.session = aiohttp.ClientSession()
-        
-        # Use WhisperSTTService instead of WhisperService with CPU configuration
-        whisper_service = WhisperSTTService(
-            model=Model.DISTIL_MEDIUM_EN,  # Using a pre-trained distilled model optimized for English
-            device="cpu",                  # Explicitly set to CPU mode
-            no_speech_prob=0.4             # Threshold for detecting no speech
-        )
-        
-        # Create NLP service for intent classification
-        nlp_service = HealthcareNLP(
-            HealthcareNLPParams(command_handler=self.handle_command)
-        )
-        
-        # Create the pipeline
-        self.pipeline = Pipeline([
-            self.transport.input(),  # Audio input
-            whisper_service,         # Speech recognition
-            nlp_service              # Intent classification
-        ])
-        
-        # Create a task for the pipeline
-        self.task = PipelineTask(self.pipeline)
-        
-        # Create a runner for the task
-        self.runner = PipelineRunner()
+        try:
+            logger.info("Beginning voice pipeline setup...")
+            
+            # Create the transport for audio input with appropriate settings for elderly users
+            logger.info("Initializing audio transport...")
+            transport_params = TransportParams(
+                audio_in_enabled=True,
+                audio_in_sample_rate=16000,
+                audio_in_channels=1,
+                audio_out_enabled=False
+            )
+            self.transport = LocalAudioTransport(transport_params)
+            logger.info("Audio transport initialized successfully")
+            
+            # Initialize WhisperSTTService with appropriate settings
+            logger.info("Initializing Whisper STT service...")
+            whisper_service = WhisperSTTService(
+                model=Model.DISTIL_MEDIUM_EN,  # Using a pre-trained distilled model optimized for English
+                device="cpu",                  # Explicitly set to CPU mode
+                no_speech_prob=0.4             # Threshold for detecting no speech
+            )
+            logger.info("Whisper STT service initialized successfully")
+            
+            # Create NLP service for intent classification with proper pipeline linking
+            logger.info("Initializing NLP service...")
+            nlp_service = HealthcareNLP(
+                HealthcareNLP.InputParams(command_handler=self.handle_command)
+            )
+            logger.info("NLP service initialized successfully")
+            
+            # Create the pipeline and properly link components
+            logger.info("Creating pipeline with components...")
+            
+            # Link the components in the correct order
+            # 1. Transport input -> Whisper
+            self.transport.input().link(whisper_service)
+            
+            # 2. Whisper -> NLP
+            whisper_service.link(nlp_service)
+            
+            # Create the full pipeline with the correct component hierarchy
+            self.pipeline = Pipeline([
+                self.transport.input(),  # Audio input
+                whisper_service,         # Speech recognition
+                nlp_service              # Intent classification
+            ])
+            logger.info("Pipeline created successfully")
+            
+            # Create a task for the pipeline
+            logger.info("Creating pipeline task...")
+            self.task = PipelineTask(self.pipeline)
+            logger.info("Pipeline task created successfully")
+            
+            # Create a runner for the task
+            logger.info("Creating pipeline runner...")
+            self.runner = PipelineRunner()
+            logger.info("Pipeline runner created successfully")
+            
+            logger.info("Voice pipeline setup complete!")
+        except Exception as e:
+            logger.error(f"Failed to set up voice pipeline: {e}", exc_info=True)
+            raise
     
     async def start(self):
         """Start the voice processing pipeline"""
-        await self.setup_pipeline()
-        logger.info("Starting voice recognition system")
-        await self.runner.run(self.task)
+        try:
+            logger.info("Setting up voice recognition pipeline...")
+            await self.setup_pipeline()
+            logger.info("Starting voice recognition system...")
+            await self.runner.run(self.task)
+            logger.info("Voice recognition system started successfully")
+        except Exception as e:
+            logger.error(f"Failed to start voice recognition system: {e}", exc_info=True)
+            raise
     
     async def stop(self):
         """Stop the voice processing pipeline"""
-        logger.info("Stopping voice recognition system")
-        if self.runner:
-            await self.runner.stop()
-        if self.session:
-            await self.session.close()
+        try:
+            logger.info("Stopping voice recognition system...")
+            if self.runner:
+                await self.runner.stop()
+                logger.info("Pipeline runner stopped")
+            logger.info("Voice recognition system stopped successfully")
+        except Exception as e:
+            logger.error(f"Error while stopping voice recognition system: {e}", exc_info=True)
+            # Don't re-raise as this is cleanup code
