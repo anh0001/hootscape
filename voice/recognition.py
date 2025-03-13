@@ -290,16 +290,30 @@ class VoiceSystem:
             logger.info("Stopping voice recognition system...")
             if self.task:
                 logger.info("Cancelling pipeline task...")
-                await self.task.cancel()  # Now properly awaited
+                self.task.cancel()  # Don't await this directly
                 
+                # Add a timeout for the task to complete
+                try:
+                    await asyncio.wait_for(asyncio.shield(self.task), timeout=2.0)
+                except asyncio.TimeoutError:
+                    logger.warning("Task cancellation timed out")
+                except asyncio.CancelledError:
+                    logger.info("Task cancelled successfully")
+                    
             if self.runner:
                 logger.info("Stopping pipeline runner...")
-                await self.runner.stop()
-                
+                try:
+                    await asyncio.wait_for(self.runner.stop(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    logger.warning("Runner stop timed out")
+                    
             if self.transport:
                 logger.info("Closing audio transport...")
-                await self.transport.close()
-                
+                try:
+                    await asyncio.wait_for(self.transport.close(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    logger.warning("Transport close timed out")
+                    
             logger.info("Voice recognition system stopped successfully")
         except Exception as e:
             logger.error(f"Error while stopping voice recognition system: {e}", exc_info=True)
