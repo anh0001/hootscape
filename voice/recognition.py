@@ -288,9 +288,18 @@ class VoiceSystem:
         """Stop the voice processing pipeline"""
         try:
             logger.info("Stopping voice recognition system...")
+            if self.task:
+                logger.info("Cancelling pipeline task...")
+                self.task.cancel()
+                
             if self.runner:
+                logger.info("Stopping pipeline runner...")
                 await self.runner.stop()
-                logger.info("Pipeline runner stopped")
+                
+            if self.transport:
+                logger.info("Closing audio transport...")
+                await self.transport.close()
+                
             logger.info("Voice recognition system stopped successfully")
         except Exception as e:
             logger.error(f"Error while stopping voice recognition system: {e}", exc_info=True)

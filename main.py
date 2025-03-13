@@ -109,21 +109,34 @@ async def shutdown(tasks, session, voice_system, soundscape, shutdown_event):
     Gracefully shut down all components
     """
     logger.info("Initiating graceful shutdown...")
-    for task in tasks:
-        task.cancel()
-    await asyncio.gather(*tasks, return_exceptions=True)
     
+    # Explicitly stop the voice system first
     if voice_system:
+        logger.info("Stopping voice system...")
         await voice_system.stop()
     
-    if session:
+    # Cancel all tasks and wait for them to complete
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    
+    # Wait for all tasks to complete with a timeout
+    try:
+        await asyncio.wait(tasks, timeout=5)
+    except asyncio.CancelledError:
+        logger.info("Tasks cancelled")
+    
+    # Close any remaining sessions
+    if session and not session.closed:
         await session.close()
     
     # Clean up soundscape resources
     if soundscape:
+        logger.info("Cleaning up soundscape...")
         soundscape.stop_update_thread()
         soundscape.cleanup()
-        
+    
+    logger.info("Shutdown completed")
     shutdown_event.set()
 
 async def main():
@@ -178,11 +191,12 @@ async def main():
         shutdown_event = asyncio.Event()
         loop = asyncio.get_running_loop()
         
+        def signal_handler():
+            logger.info("Interrupt received, shutting down...")
+            asyncio.create_task(shutdown(tasks, session, voice_system, soundscape, shutdown_event))
+
         for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(
-                sig, 
-                lambda: asyncio.create_task(shutdown(tasks, session, voice_system, soundscape, shutdown_event))
-            )
+            loop.add_signal_handler(sig, signal_handler)
         
         try:
             logger.info("System initialized and running")
