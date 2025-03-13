@@ -4,17 +4,29 @@ import os
 from typing import Callable, Dict, Any, Optional
 import json
 import logging
+import tempfile
+import io
+import wave
 
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
-from pipecat.frames.frames import TextFrame
+from pipecat.frames.frames import TextFrame, AudioFrame
 from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
 from pipecat.transports.base_transport import TransportParams
 from pipecat.services.whisper import WhisperSTTService, Model
 from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
 from pipecat.processors.frame_processor import FrameProcessor
 from pydantic import Field, BaseModel
+
+# Try to import OpenAI service from pipecat if available
+try:
+    from pipecat.services.openai import OpenAISTTService, OpenAISTTServiceParams
+    HAS_PIPECAT_OPENAI = True
+except (ImportError, AttributeError):
+    HAS_PIPECAT_OPENAI = False
+
+from config.settings import settings, SpeechRecognitionProvider
 
 logger = logging.getLogger("voice_system")
 
@@ -156,6 +168,103 @@ class HealthcareNLP(TextProcessor):
         # Push the frame to the next component
         await self.push_frame(frame, direction)
 
+class OpenAIAudioProcessor(FrameProcessor):
+    """
+    Processor that buffers audio frames and sends them to OpenAI's speech recognition API.
+    This provides better speech recognition for elderly users.
+    """
+    
+    class InputParams(BaseModel):
+        api_key: str = Field(default="", description="OpenAI API key")
+        model: str = Field(default="whisper-1", description="OpenAI model to use")
+        buffer_duration_ms: int = Field(default=3000, description="Duration of audio to buffer before processing (ms)")
+        sample_rate: int = Field(default=16000, description="Sample rate of the audio")
+        language: str = Field(default="en", description="Language code")
+        
+    def __init__(self, params: InputParams = None, **kwargs):
+        super().__init__(**kwargs)
+        self.params = params or self.InputParams()
+        self.audio_buffer = b""
+        self.last_process_time = 0
+        self.is_processing = False
+        
+    async def process_frame(self, frame, direction):
+        await super().process_frame(frame, direction)
+        
+        # Only process AudioFrames
+        if not isinstance(frame, AudioFrame):
+            await self.push_frame(frame, direction)
+            return
+            
+        # Buffer the audio
+        self.audio_buffer += frame.audio
+        current_time = asyncio.get_event_loop().time()
+        
+        # Check if we should process the buffer (either enough time has passed or buffer is large enough)
+        buffer_duration = len(self.audio_buffer) / (self.params.sample_rate * 2)  # 16-bit audio = 2 bytes per sample
+        buffer_duration_ms = buffer_duration * 1000
+        
+        if (buffer_duration_ms >= self.params.buffer_duration_ms and 
+            not self.is_processing and 
+            current_time - self.last_process_time >= 1.0):  # Don't process more than once per second
+            
+            self.is_processing = True
+            try:
+                # Process the audio buffer
+                text = await self._transcribe_audio(self.audio_buffer)
+                if text:
+                    # Create a text frame and push it
+                    text_frame = TextFrame(text=text)
+                    await self.push_frame(text_frame, direction)
+                    
+                # Reset the buffer
+                self.audio_buffer = b""
+                self.last_process_time = current_time
+            finally:
+                self.is_processing = False
+                
+        # Always push the original audio frame
+        await self.push_frame(frame, direction)
+        
+    async def _transcribe_audio(self, audio_data):
+        """
+        Send audio data to OpenAI's API for transcription.
+        """
+        try:
+            import openai
+            
+            # Set the API key
+            openai.api_key = self.params.api_key
+            
+            # Convert audio data to WAV file
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
+                temp_filename = temp_file.name
+                
+                # Create WAV file from audio buffer
+                with wave.open(temp_filename, 'wb') as wav_file:
+                    wav_file.setnchannels(1)  # Mono
+                    wav_file.setsampwidth(2)  # 16-bit
+                    wav_file.setframerate(self.params.sample_rate)
+                    wav_file.writeframes(audio_data)
+            
+            # Send to OpenAI API
+            with open(temp_filename, "rb") as audio_file:
+                response = openai.Audio.transcribe(
+                    model=self.params.model,
+                    file=audio_file,
+                    language=self.params.language
+                )
+            
+            # Clean up temp file
+            os.unlink(temp_filename)
+            
+            # Extract and return the transcribed text
+            return response.get("text", "")
+            
+        except Exception as e:
+            logger.error(f"Error transcribing audio with OpenAI: {e}")
+            return ""
+
 class VoiceSystem:
     """Voice recognition system for elderly healthcare with the owl robot."""
     
@@ -232,29 +341,79 @@ class VoiceSystem:
             self.transport = LocalAudioTransport(transport_params)
             logger.info("Audio transport initialized successfully")
             
-            # Initialize WhisperSTTService with appropriate settings
-            logger.info("Initializing Whisper STT service...")
-            whisper_service = WhisperSTTService(
-                model=Model.DISTIL_MEDIUM_EN,  # Using a pre-trained distilled model optimized for English
-                device="cpu",                  # Explicitly set to CPU mode
-                no_speech_prob=0.4             # Threshold for detecting no speech
-            )
-            logger.info("Whisper STT service initialized successfully")
+            # Choose speech recognition service based on configuration
+            pipeline_components = [self.transport.input()]
+            
+            if hasattr(settings, 'speech_recognition_provider') and settings.speech_recognition_provider == SpeechRecognitionProvider.OPENAI:
+                logger.info("Initializing OpenAI speech recognition service...")
+                
+                # Check if we can use the built-in OpenAI service from pipecat
+                if HAS_PIPECAT_OPENAI and hasattr(settings, 'openai_api_key'):
+                    try:
+                        # Try to use the built-in OpenAI service
+                        openai_service = OpenAISTTService(
+                            OpenAISTTServiceParams(
+                                api_key=settings.openai_api_key,
+                                model=getattr(settings, 'openai_model', 'whisper-1'),
+                                language="en"
+                            )
+                        )
+                        pipeline_components.append(openai_service)
+                        logger.info("Using Pipecat's built-in OpenAI STT service")
+                    except Exception as e:
+                        # Fall back to our custom implementation
+                        logger.warning(f"Could not initialize Pipecat's OpenAI service: {e}")
+                        logger.info("Falling back to custom OpenAI implementation")
+                        openai_processor = OpenAIAudioProcessor(
+                            OpenAIAudioProcessor.InputParams(
+                                api_key=settings.openai_api_key,
+                                model=getattr(settings, 'openai_model', 'whisper-1'),
+                                language="en"
+                            )
+                        )
+                        pipeline_components.append(openai_processor)
+                else:
+                    # Use our custom implementation
+                    logger.info("Using custom OpenAI implementation")
+                    if not hasattr(settings, 'openai_api_key') or not settings.openai_api_key:
+                        logger.warning("OpenAI API key not found in settings, falling back to Whisper")
+                        whisper_service = WhisperSTTService(
+                            model=Model.DISTIL_MEDIUM_EN,
+                            device="cpu",
+                            no_speech_prob=0.4
+                        )
+                        pipeline_components.append(whisper_service)
+                    else:
+                        openai_processor = OpenAIAudioProcessor(
+                            OpenAIAudioProcessor.InputParams(
+                                api_key=settings.openai_api_key,
+                                model=getattr(settings, 'openai_model', 'whisper-1'),
+                                language="en"
+                            )
+                        )
+                        pipeline_components.append(openai_processor)
+            else:
+                # Default to Whisper
+                logger.info("Initializing Whisper STT service...")
+                whisper_service = WhisperSTTService(
+                    model=Model.DISTIL_MEDIUM_EN,
+                    device="cpu",
+                    no_speech_prob=0.4
+                )
+                pipeline_components.append(whisper_service)
+                logger.info("Whisper STT service initialized successfully")
             
             # Create NLP service for intent classification
             logger.info("Initializing NLP service...")
             nlp_service = HealthcareNLP(
                 HealthcareNLP.InputParams(command_handler=self.handle_command)
             )
+            pipeline_components.append(nlp_service)
             logger.info("NLP service initialized successfully")
             
             # Create the pipeline with components
             logger.info("Creating pipeline with components...")
-            self.pipeline = Pipeline([
-                self.transport.input(),  # Audio input
-                whisper_service,         # Speech recognition
-                nlp_service              # Intent classification
-            ])
+            self.pipeline = Pipeline(pipeline_components)
             logger.info("Pipeline created successfully")
             
             # Create a task for the pipeline
@@ -264,9 +423,7 @@ class VoiceSystem:
             
             # Create a runner for the task
             logger.info("Creating pipeline runner...")
-            # Create a runner for the task with signal handling disabled
             self.runner = PipelineRunner(handle_sigint=False)
-            # self.runner = PipelineRunner()
             logger.info("Pipeline runner created successfully")
             
             logger.info("Voice pipeline setup complete!")
