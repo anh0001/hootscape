@@ -231,10 +231,10 @@ class OpenAIAudioProcessor(FrameProcessor):
         Send audio data to OpenAI's API for transcription.
         """
         try:
-            import openai
+            from openai import OpenAI
             
-            # Set the API key
-            openai.api_key = self.params.api_key
+            # Create the OpenAI client
+            client = OpenAI(api_key=self.params.api_key)
             
             # Convert audio data to WAV file
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
@@ -249,7 +249,7 @@ class OpenAIAudioProcessor(FrameProcessor):
             
             # Send to OpenAI API
             with open(temp_filename, "rb") as audio_file:
-                response = openai.Audio.transcribe(
+                response = client.audio.transcriptions.create(
                     model=self.params.model,
                     file=audio_file,
                     language=self.params.language
@@ -259,7 +259,7 @@ class OpenAIAudioProcessor(FrameProcessor):
             os.unlink(temp_filename)
             
             # Extract and return the transcribed text
-            return response.get("text", "")
+            return response.text
             
         except Exception as e:
             logger.error(f"Error transcribing audio with OpenAI: {e}")
