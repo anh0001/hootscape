@@ -110,7 +110,12 @@ async def shutdown(tasks, session, voice_system, soundscape, shutdown_event):
     """
     logger.info("Initiating graceful shutdown...")
     
-    # Explicitly stop the voice system first
+    # First stop the update thread in soundscape if it exists
+    if soundscape:
+        logger.info("Stopping soundscape update thread...")
+        soundscape.stop_update_thread()
+    
+    # Explicitly stop the voice system first 
     if voice_system:
         logger.info("Stopping voice system...")
         await voice_system.stop()
@@ -120,28 +125,28 @@ async def shutdown(tasks, session, voice_system, soundscape, shutdown_event):
         if not task.done():
             task.cancel()
     
-    # Wait for all tasks to complete with a longer timeout
+    # Wait for all tasks to complete with a timeout
     try:
-        await asyncio.wait(tasks, timeout=15)  # Increased from 5
+        await asyncio.wait(tasks, timeout=5)
     except asyncio.CancelledError:
         logger.info("Tasks cancelled")
+    
+    # Clean up soundscape resources after tasks are cancelled
+    if soundscape:
+        logger.info("Cleaning up soundscape resources...")
+        soundscape.cleanup()
     
     # Close any remaining sessions
     if session and not session.closed:
         await session.close()
     
-    # Clean up soundscape resources
-    if soundscape:
-        logger.info("Cleaning up soundscape...")
-        soundscape.stop_update_thread()
-        soundscape.cleanup()
-    
-    logger.info("Shutdown completed")
+    logger.info("Setting shutdown event")
     shutdown_event.set()
     
-    # Add this fallback to force exit if shutdown is stuck
+    # Force exit after a timeout to ensure complete shutdown
+    logger.info("Setting force exit timer (3 seconds)")
     loop = asyncio.get_running_loop()
-    loop.call_later(20, os._exit, 1)  # Force exit after 20 seconds if still running
+    loop.call_later(3, lambda: os._exit(0))
 
 async def main():
     logger.info("Starting HootScape Healthcare Assistant")

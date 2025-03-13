@@ -261,44 +261,73 @@ class SoundscapeManager:
     
     def stop_update_thread(self):
         """Stop the update thread"""
+        logger.info("Stopping soundscape update thread...")
         self.running = False
-        if self.update_thread:
-            self.update_thread.join(timeout=1.0)
-            self.update_thread = None
+        if self.update_thread and self.update_thread.is_alive():
+            try:
+                self.update_thread.join(timeout=1.0)
+                logger.info("Update thread stopped")
+            except Exception as e:
+                logger.error(f"Error stopping update thread: {e}")
+            finally:
+                self.update_thread = None
     
     def cleanup(self):
         """Clean up OpenAL resources"""
+        logger.info("Cleaning up OpenAL resources...")
+        
+        # First stop the update thread
+        self.stop_update_thread()
+        
         # Stop all sources
+        source_ids_to_delete = []
         for source_id in list(self.sources.keys()):
             try:
                 al.alSourceStop(source_id)
-                source_id_c = c_uint(source_id)
-                al.alDeleteSources(1, pointer(source_id_c))
+                source_ids_to_delete.append(source_id)
             except Exception as e:
-                logger.error(f"Error deleting source: {e}")
-                pass
+                logger.error(f"Error stopping source {source_id}: {e}")
+        
+        # Delete sources - using proper OpenAL calls
+        if source_ids_to_delete:
+            try:
+                # Convert Python list to C array
+                c_sources = (c_uint * len(source_ids_to_delete))(*source_ids_to_delete)
+                al.alDeleteSources(len(source_ids_to_delete), c_sources)
+            except Exception as e:
+                logger.error(f"Error deleting sources: {e}")
+        
         self.sources.clear()
         self.playing_sources.clear()
         
         # Delete all buffers
-        for buffer_id in list(self.buffers.values()):
+        buffer_ids_to_delete = list(self.buffers.values())
+        if buffer_ids_to_delete:
             try:
-                buffer_id_c = c_uint(buffer_id)
-                al.alDeleteBuffers(1, pointer(buffer_id_c))
+                # Convert Python list to C array
+                c_buffers = (c_uint * len(buffer_ids_to_delete))(*buffer_ids_to_delete)
+                al.alDeleteBuffers(len(buffer_ids_to_delete), c_buffers)
             except Exception as e:
-                logger.error(f"Error deleting buffer: {e}")
-                pass
+                logger.error(f"Error deleting buffers: {e}")
+        
         self.buffers.clear()
         
-        # Destroy context
-        if hasattr(self, 'context') and self.context:
-            alc.alcDestroyContext(self.context)
-            self.context = None
-        
-        # Close device
-        if hasattr(self, 'device') and self.device:
-            alc.alcCloseDevice(self.device)
-            self.device = None
+        # Destroy context and close device
+        try:
+            if hasattr(self, 'context') and self.context:
+                current_context = alc.alcGetCurrentContext()
+                if current_context == self.context:
+                    alc.alcMakeContextCurrent(None)
+                alc.alcDestroyContext(self.context)
+                self.context = None
+                logger.info("OpenAL context destroyed")
+            
+            if hasattr(self, 'device') and self.device:
+                alc.alcCloseDevice(self.device)
+                self.device = None
+                logger.info("OpenAL device closed")
+        except Exception as e:
+            logger.error(f"Error destroying OpenAL context/device: {e}")
     
     async def create_forest_ambience(self):
         """Creates spatialized forest ambience"""
