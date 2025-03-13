@@ -301,15 +301,10 @@ class VoiceSystem:
             logger.info("Stopping voice recognition system...")
             if self.task:
                 logger.info("Cancelling pipeline task...")
-                self.task.cancel()  # Don't await this directly
+                # Properly await the cancel coroutine
+                await self.task.cancel()
                 
-                # Add a timeout for the task to complete
-                try:
-                    await asyncio.wait_for(asyncio.shield(self.task), timeout=2.0)
-                except asyncio.TimeoutError:
-                    logger.warning("Task cancellation timed out")
-                except asyncio.CancelledError:
-                    logger.info("Task cancelled successfully")
+                # No need to shield or wait for the task again as cancel() already handles that
                     
             if self.runner:
                 logger.info("Stopping pipeline runner...")
