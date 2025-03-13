@@ -22,7 +22,8 @@ class TextProcessor(PipelineTask):
     """Base class for text processing tasks in the pipeline."""
     
     def __init__(self, pipeline=None):
-        super().__init__(pipeline)
+        # Don't pass pipeline until we're fully initialized
+        super().__init__(None)
         self._parent = None
     
     def set_parent(self, parent):
@@ -43,11 +44,11 @@ class HealthcareNLP(TextProcessor):
         command_handler: Optional[Callable] = Field(default=None, description="Callback for handling commands")
     
     def __init__(self, params: InputParams = None, pipeline=None, **kwargs):
+        # Initialize TextProcessor without linking to the pipeline yet
+        super().__init__(None)
+        
         # Create parameters if none provided
         self.nlp_params = params or self.InputParams()
-        
-        # Pass the pipeline to the parent class constructor
-        super().__init__(pipeline)
         
         # Initialize MarkdownTextFilter for text preprocessing if needed
         self.text_filter = MarkdownTextFilter(
@@ -57,6 +58,10 @@ class HealthcareNLP(TextProcessor):
                 filter_tables=True
             )
         )
+        
+        # Only after full initialization, manually set the pipeline if provided
+        if pipeline:
+            self._source.link(pipeline)
     
     async def process_frame(self, frame):
         if not isinstance(frame, TextFrame):
@@ -235,7 +240,7 @@ class VoiceSystem:
             )
             logger.info("Whisper STT service initialized successfully")
             
-            # Create NLP service for intent classification with proper pipeline linking
+            # Create NLP service for intent classification
             logger.info("Initializing NLP service...")
             nlp_service = HealthcareNLP(
                 HealthcareNLP.InputParams(command_handler=self.handle_command)
@@ -245,19 +250,20 @@ class VoiceSystem:
             # Create the pipeline and properly link components
             logger.info("Creating pipeline with components...")
             
-            # Link the components in the correct order
+            # First create the pipeline with all components
+            self.pipeline = Pipeline([
+                self.transport.input(),  # Audio input
+                whisper_service,         # Speech recognition
+                nlp_service              # Intent classification
+            ])
+            
+            # Now link the components in the correct order
             # 1. Transport input -> Whisper
             self.transport.input().link(whisper_service)
             
             # 2. Whisper -> NLP
             whisper_service.link(nlp_service)
             
-            # Create the full pipeline with the correct component hierarchy
-            self.pipeline = Pipeline([
-                self.transport.input(),  # Audio input
-                whisper_service,         # Speech recognition
-                nlp_service              # Intent classification
-            ])
             logger.info("Pipeline created successfully")
             
             # Create a task for the pipeline
