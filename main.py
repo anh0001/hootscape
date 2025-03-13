@@ -155,7 +155,7 @@ async def shutdown(tasks, session, voice_system, soundscape, shutdown_event):
 
 async def main():
     logger.info("Starting HootScape Healthcare Assistant")
-    load_dotenv()
+    load_dotenv(override=True)
     
     # Initialize core components
     event_bus = EventBus()
