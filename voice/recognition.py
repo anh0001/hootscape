@@ -264,7 +264,9 @@ class VoiceSystem:
             
             # Create a runner for the task
             logger.info("Creating pipeline runner...")
-            self.runner = PipelineRunner()
+            # Create a runner for the task with signal handling disabled
+            self.runner = PipelineRunner(handle_sigint=False)
+            # self.runner = PipelineRunner()
             logger.info("Pipeline runner created successfully")
             
             logger.info("Voice pipeline setup complete!")
