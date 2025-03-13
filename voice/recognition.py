@@ -281,7 +281,6 @@ class VoiceSystem:
             await self.setup_pipeline()
             logger.info("Starting voice recognition system...")
             
-            # Add try/finally to ensure proper cleanup even if runner.run raises exception
             try:
                 await self.runner.run(self.task)
                 logger.info("Voice recognition system started successfully")
