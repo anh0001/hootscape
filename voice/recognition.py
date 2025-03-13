@@ -9,30 +9,28 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.frames.frames import TextFrame
-from pipecat.transports.local.audio import LocalAudioTransport
+from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
 from pipecat.transports.base_transport import TransportParams
 from pipecat.services.whisper import WhisperSTTService, Model
 from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
+from pipecat.processors.frame_processor import FrameProcessor
 from pydantic import Field, BaseModel
 
 logger = logging.getLogger("voice_system")
 
-# Create our own TextProcessor class based on PipelineTask
-class TextProcessor(PipelineTask):
+# Create our own TextProcessor class based on FrameProcessor
+class TextProcessor(FrameProcessor):
     """Base class for text processing tasks in the pipeline."""
     
-    def __init__(self, pipeline=None):
-        # Don't pass pipeline until we're fully initialized
-        super().__init__(None)
-        self._parent = None
+    def __init__(self, **kwargs):
+        # Initialize FrameProcessor properly
+        super().__init__(**kwargs)
     
-    def set_parent(self, parent):
-        """Store the parent component for proper pipeline linking."""
-        self._parent = parent
-    
-    async def process_frame(self, frame):
+    async def process_frame(self, frame, direction):
         """Override this method in subclasses to process text frames."""
-        return frame
+        await super().process_frame(frame, direction)
+        # Process the frame here
+        await self.push_frame(frame, direction)
 
 # Simple NLP processor for healthcare commands
 class HealthcareNLP(TextProcessor):
@@ -43,9 +41,9 @@ class HealthcareNLP(TextProcessor):
     class InputParams(BaseModel):
         command_handler: Optional[Callable] = Field(default=None, description="Callback for handling commands")
     
-    def __init__(self, params: InputParams = None, pipeline=None, **kwargs):
-        # Initialize TextProcessor without linking to the pipeline yet
-        super().__init__(None)
+    def __init__(self, params: InputParams = None, **kwargs):
+        # Initialize parent properly
+        super().__init__(**kwargs)
         
         # Create parameters if none provided
         self.nlp_params = params or self.InputParams()
@@ -58,21 +56,21 @@ class HealthcareNLP(TextProcessor):
                 filter_tables=True
             )
         )
-        
-        # Only after full initialization, manually set the pipeline if provided
-        if pipeline:
-            self._source.link(pipeline)
     
-    async def process_frame(self, frame):
+    async def process_frame(self, frame, direction):
+        await super().process_frame(frame, direction)
+        
         if not isinstance(frame, TextFrame):
-            return frame
+            await self.push_frame(frame, direction)
+            return
             
         text = frame.text.lower().strip()
         logger.info(f"Processing text: {text}")
         
         # Skip processing if empty
         if not text:
-            return frame
+            await self.push_frame(frame, direction)
+            return
             
         # Check for wake word first
         wake_words = ["hey owl", "hello owl", "owl", "hey there"]
@@ -86,7 +84,8 @@ class HealthcareNLP(TextProcessor):
                     break
         else:
             # No wake word, don't process further
-            return frame
+            await self.push_frame(frame, direction)
+            return
             
         # Basic intent classification for healthcare
         intent = "unknown"
@@ -154,7 +153,8 @@ class HealthcareNLP(TextProcessor):
             except Exception as e:
                 logger.error(f"Error in command handler: {e}")
         
-        return frame
+        # Push the frame to the next component
+        await self.push_frame(frame, direction)
 
 class VoiceSystem:
     """Voice recognition system for elderly healthcare with the owl robot."""
@@ -222,11 +222,12 @@ class VoiceSystem:
             
             # Create the transport for audio input with appropriate settings for elderly users
             logger.info("Initializing audio transport...")
-            transport_params = TransportParams(
+            transport_params = LocalAudioTransportParams(
                 audio_in_enabled=True,
                 audio_in_sample_rate=16000,
                 audio_in_channels=1,
-                audio_out_enabled=False
+                audio_out_enabled=False,
+                audio_in_device_index=self.device_index  # Using the correct parameter name
             )
             self.transport = LocalAudioTransport(transport_params)
             logger.info("Audio transport initialized successfully")
@@ -247,23 +248,13 @@ class VoiceSystem:
             )
             logger.info("NLP service initialized successfully")
             
-            # Create the pipeline and properly link components
+            # Create the pipeline with components
             logger.info("Creating pipeline with components...")
-            
-            # First create the pipeline with all components
             self.pipeline = Pipeline([
                 self.transport.input(),  # Audio input
                 whisper_service,         # Speech recognition
                 nlp_service              # Intent classification
             ])
-            
-            # Now link the components in the correct order
-            # 1. Transport input -> Whisper
-            self.transport.input().link(whisper_service)
-            
-            # 2. Whisper -> NLP
-            whisper_service.link(nlp_service)
-            
             logger.info("Pipeline created successfully")
             
             # Create a task for the pipeline
