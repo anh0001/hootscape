@@ -115,10 +115,14 @@ async def shutdown(tasks, session, voice_system, soundscape, shutdown_event):
         logger.info("Stopping soundscape update thread...")
         soundscape.stop_update_thread()
     
-    # Explicitly stop the voice system first 
+    # Explicitly stop the voice system first - this needs to complete before cancelling other tasks
     if voice_system:
         logger.info("Stopping voice system...")
-        await voice_system.stop()
+        try:
+            await asyncio.wait_for(voice_system.stop(), timeout=3.0)
+            logger.info("Voice system stopped successfully")
+        except asyncio.TimeoutError:
+            logger.warning("Voice system stop timed out, continuing shutdown")
     
     # Cancel all tasks and wait for them to complete
     for task in tasks:
@@ -143,10 +147,11 @@ async def shutdown(tasks, session, voice_system, soundscape, shutdown_event):
     logger.info("Setting shutdown event")
     shutdown_event.set()
     
-    # Force exit after a timeout to ensure complete shutdown
-    logger.info("Setting force exit timer (3 seconds)")
+    # Force exit after a longer timeout to ensure complete shutdown
+    # but only if normal shutdown doesn't complete
+    logger.info("Setting force exit timer (5 seconds - increased from 3)")
     loop = asyncio.get_running_loop()
-    loop.call_later(3, lambda: os._exit(0))
+    loop.call_later(5, lambda: os._exit(0))
 
 async def main():
     logger.info("Starting HootScape Healthcare Assistant")

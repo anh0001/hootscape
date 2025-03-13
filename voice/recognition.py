@@ -278,8 +278,17 @@ class VoiceSystem:
             logger.info("Setting up voice recognition pipeline...")
             await self.setup_pipeline()
             logger.info("Starting voice recognition system...")
-            await self.runner.run(self.task)
-            logger.info("Voice recognition system started successfully")
+            
+            # Add try/finally to ensure proper cleanup even if runner.run raises exception
+            try:
+                await self.runner.run(self.task)
+                logger.info("Voice recognition system started successfully")
+            except asyncio.CancelledError:
+                logger.info("Voice recognition task cancelled")
+                raise
+            except Exception as e:
+                logger.error(f"Error in voice recognition pipeline: {e}")
+                raise
         except Exception as e:
             logger.error(f"Failed to start voice recognition system: {e}", exc_info=True)
             raise
