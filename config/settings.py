@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # Speech Recognition settings
     # To change the provider, modify this value directly or set SPEECH_RECOGNITION_PROVIDER env var
     speech_recognition_provider: SpeechRecognitionProvider = Field(
-        default=SpeechRecognitionProvider.WHISPER, 
+        default=SpeechRecognitionProvider.OPENAI, 
         env="SPEECH_RECOGNITION_PROVIDER",
         description="Speech recognition provider (whisper or openai)"
     )

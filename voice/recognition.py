@@ -11,7 +11,7 @@ import wave
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
-from pipecat.frames.frames import TextFrame, AudioFrame
+from pipecat.frames.frames import TextFrame, InputAudioRawFrame, OutputAudioRawFrame  # Updated import
 from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
 from pipecat.transports.base_transport import TransportParams
 from pipecat.services.whisper import WhisperSTTService, Model
@@ -191,8 +191,8 @@ class OpenAIAudioProcessor(FrameProcessor):
     async def process_frame(self, frame, direction):
         await super().process_frame(frame, direction)
         
-        # Only process AudioFrames
-        if not isinstance(frame, AudioFrame):
+        # Only process InputAudioRawFrame instead of AudioFrame
+        if not isinstance(frame, InputAudioRawFrame):
             await self.push_frame(frame, direction)
             return
             
