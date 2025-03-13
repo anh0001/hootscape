@@ -290,7 +290,7 @@ class VoiceSystem:
             logger.info("Stopping voice recognition system...")
             if self.task:
                 logger.info("Cancelling pipeline task...")
-                self.task.cancel()
+                await self.task.cancel()  # Now properly awaited
                 
             if self.runner:
                 logger.info("Stopping pipeline runner...")

@@ -120,9 +120,9 @@ async def shutdown(tasks, session, voice_system, soundscape, shutdown_event):
         if not task.done():
             task.cancel()
     
-    # Wait for all tasks to complete with a timeout
+    # Wait for all tasks to complete with a longer timeout
     try:
-        await asyncio.wait(tasks, timeout=5)
+        await asyncio.wait(tasks, timeout=15)  # Increased from 5
     except asyncio.CancelledError:
         logger.info("Tasks cancelled")
     
@@ -138,6 +138,10 @@ async def shutdown(tasks, session, voice_system, soundscape, shutdown_event):
     
     logger.info("Shutdown completed")
     shutdown_event.set()
+    
+    # Add this fallback to force exit if shutdown is stuck
+    loop = asyncio.get_running_loop()
+    loop.call_later(20, os._exit, 1)  # Force exit after 20 seconds if still running
 
 async def main():
     logger.info("Starting HootScape Healthcare Assistant")
