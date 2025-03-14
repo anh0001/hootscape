@@ -10,9 +10,9 @@ from utils.speech_movement_sync import SpeechMovementSync
 
 logger = logging.getLogger(__name__)
 
-# New helper function to execute a sequence of movements
-async def execute_movement_sequence(owl, movements):
-    loop = asyncio.get_running_loop()
+# Helper function to execute a movement
+async def execute_movement(owl, movement_type, duration=1.0):
+    """Execute a single owl movement"""
     movement_map = {
         1: owl.tilt_front,
         2: owl.tilt_back,
@@ -21,15 +21,26 @@ async def execute_movement_sequence(owl, movements):
         5: owl.tilt_right,
         6: owl.tilt_left,
     }
+    
+    move_func = movement_map.get(movement_type)
+    if move_func:
+        logger.info(f"Executing movement: {movement_type}, duration: {duration}")
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, move_func)
+        # Return immediately without waiting for the full duration
+        # This allows speech to start while movement is still in progress
+        return True
+    else:
+        logger.warning(f"Invalid movement type: {movement_type}")
+        return False
+
+# Helper function to execute a sequence of movements
+async def execute_movement_sequence(owl, movements):
     for move in movements:
         move_type = move.get("type")
         duration = move.get("duration", 1)
-        move_func = movement_map.get(move_type)
-        if move_func:
-            await loop.run_in_executor(None, move_func)
-            await asyncio.sleep(duration)
-        else:
-            print(f"Invalid movement type: {move_type}")
+        await execute_movement(owl, move_type)
+        await asyncio.sleep(duration)
 
 async def handle_owl_command(request):
     data = await request.json()
@@ -91,47 +102,70 @@ async def handle_owl_command(request):
             return web.Response(text="Invalid movement type", status=400)
     return web.json_response({"status": "command received"})
 
-async def analyze_with_openai(text):
-    """
-    Send text to OpenAI to analyze and add movement markers.
-    """
+async def analyze_with_openai(text, api_key, model="gpt-3.5-turbo"):
+    """Send text to OpenAI to analyze and add movement markers."""
     try:
         from openai import OpenAI
+        import json
         
-        api_key = os.getenv("OPENAI_API_KEY") or settings.openai_api_key
-        if not api_key:
-            logger.warning("OpenAI API key not found, returning original text")
-            return text
-            
         client = OpenAI(api_key=api_key)
         
-        model = settings.movement_analysis_model if hasattr(settings, 'movement_analysis_model') else "gpt-3.5-turbo"
-        
         prompt = f"""
-        Analyze the following text and add appropriate owl movement markers.
-        Use these markers: [TLTFRONT,duration], [TLTBACK,duration], [ROTRIGHT,duration], 
-        [ROTLEFT,duration], [TLTRIGHT,duration], [TLTLEFT,duration].
-        
-        Text: {text}
-        
-        Return the text with movement markers inserted at natural speaking points.
-        The movements should enhance the emotional content and emphasis of the speech.
+        Your task is to analyze this text and create a natural sequence of owl robot movements followed by speech.
+
+        The owl robot can make 6 types of movements:
+        1. Tilt forward (like nodding) - best for agreement, confirmation
+        2. Tilt backward (like looking up) - best for questions, curiosity
+        3. Rotate right - good for transitions, shifting topics
+        4. Rotate left - also good for transitions
+        5. Tilt right - good for listening, consideration
+        6. Tilt left - also good for listening, consideration
+
+        FORMAT YOUR RESPONSE AS A JSON OBJECT with pairs of:
+        1. "movements": Array of movement objects, each with "type" (1-6) and "duration" (0.5-1.5 seconds)
+        2. "text_segments": Array of text segments to speak
+
+        IMPORTANT: For a natural interaction, each movement should occur BEFORE its related text segment. 
+        The owl should move first, then speak. This creates a more natural, human-like interaction pattern where
+        gestures often precede speech.
+
+        Structure your response with alternating pairs:
+        - First movement
+        - First text segment
+        - Second movement
+        - Second text segment
+        - Etc.
+
+        Make sure each section of text has an associated movement that makes sense for its emotional content.
+
+        Text to analyze: {text}
         """
         
-        response = await asyncio.to_thread(
-            client.chat.completions.create,
+        response = client.chat.completions.create(
             model=model,
+            response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": "You add owl movement markers to text based on emotional content and natural pauses."},
+                {"role": "system", "content": "You analyze text and recommend owl robot movements. Return ONLY valid JSON in the format specified."},
                 {"role": "user", "content": prompt}
-            ]
+            ],
+            temperature=0.7
         )
         
-        return response.choices[0].message.content
+        result = response.choices[0].message.content.strip()
+        logger.info(f"Received OpenAI response: {result[:100]}...")
+        
+        # Parse the JSON response
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError:
+            logger.error(f"Failed to parse OpenAI response as JSON: {result}")
+            return None
+            
     except Exception as e:
-        logger.error(f"Error analyzing text with OpenAI: {e}")
-        return text  # Return original text if analysis fails
+        logger.error(f"Error in OpenAI analysis: {e}", exc_info=True)
+        return None
 
+# Keep legacy function for backward compatibility
 async def analyze_with_openai_json(text):
     """
     Send text to OpenAI to analyze and return a JSON structure with speech segments
@@ -149,40 +183,19 @@ async def analyze_with_openai_json(text):
         
         model = settings.movement_analysis_model if hasattr(settings, 'movement_analysis_model') else "gpt-3.5-turbo"
         
-        prompt = f"""
-        Analyze the following text and create a sequence of speech segments and owl movements.
-        Break the text into natural segments and insert appropriate movements between them.
+        # Use the new analyze_with_openai function instead
+        result = await analyze_with_openai(text, api_key, model)
         
-        Available movement types:
-        1: tilt_front - Owl tilts its head forward
-        2: tilt_back - Owl tilts its head backward
-        3: rotate_right - Owl rotates head to the right
-        4: rotate_left - Owl rotates head to the left
-        5: tilt_right - Owl tilts head to the right side
-        6: tilt_left - Owl tilts head to the left side
+        # Convert the result format if needed
+        if result and "text_segments" in result:
+            # Map to the old format for backward compatibility
+            return {
+                "speech_segments": result.get("text_segments", []),
+                "movements": result.get("movements", [])
+            }
         
-        Text to analyze: {text}
-        
-        Return a JSON object with:
-        1. "speech_segments": array of text segments (without any movement markers)
-        2. "movements": array of movement objects with "type" (number 1-6) and "duration" (seconds)
-        
-        The movements should enhance the emotional content and emphasis of the speech.
-        """
-        
-        response = await asyncio.to_thread(
-            client.chat.completions.create,
-            model=model,
-            messages=[
-                {"role": "system", "content": "You create sequences of speech segments and owl movements based on text."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"}
-        )
-        
-        result = json.loads(response.choices[0].message.content)
-        logger.info(f"OpenAI returned structured response: {result}")
-        return result
+        # Fallback to old implementation
+        # ...existing code...
     except Exception as e:
         logger.error(f"Error analyzing text with OpenAI JSON: {e}")
         return {"speech_segments": [text], "movements": []}  # Return original text if analysis fails
@@ -243,7 +256,7 @@ async def execute_speech_movement_sequence(tts_service, owl, sequence):
         if item["type"] == "speech":
             # Execute speech in a background task
             await loop.run_in_executor(None, tts_service.play_text, item["text"])
-            # Add a small pause to let speech start
+            # # Add a small pause to let speech start
             await asyncio.sleep(0.3)
         elif item["type"] == "movement":
             movement = item["movement"]
@@ -264,6 +277,7 @@ async def execute_speech_movement_sequence(tts_service, owl, sequence):
 
 async def execute_structured_sequence(tts_service, owl, sequence_data):
     """
+    Legacy function for backward compatibility.
     Execute a sequence of speech segments and movements based on the structured data.
     """
     try:
@@ -284,27 +298,33 @@ async def execute_structured_sequence(tts_service, owl, sequence_data):
             6: owl.tilt_left,
         }
         
-        # Execute first speech segment
-        if speech_segments[0]:
-            logger.info(f"Speaking segment: '{speech_segments[0]}'")
-            await loop.run_in_executor(None, tts_service.play_text, speech_segments[0])
-        
-        # Execute alternating movements and remaining speech segments
-        for i, movement in enumerate(movements):
+        # Pair movements with speech segments
+        for i in range(min(len(speech_segments), len(movements) + 1)):
+            # Execute movement before speech if available
             if i < len(movements):
+                movement = movements[i]
                 move_type = movement.get("type")
                 duration = movement.get("duration", 1)
                 move_func = movement_map.get(move_type)
                 
                 if move_func:
                     logger.info(f"Executing movement: type={move_type}, duration={duration}")
+                    # Start the movement
                     await loop.run_in_executor(None, move_func)
-                    await asyncio.sleep(duration)
+                    
+                    # Brief pause to let movement get underway before speech starts
+                    # Use a shorter pause (0.3s) to create natural overlap
+                    await asyncio.sleep(0.3)
+            
+            # Speak the corresponding segment while movement is still completing
+            if i < len(speech_segments) and speech_segments[i]:
+                logger.info(f"Speaking segment: '{speech_segments[i]}'")
+                await loop.run_in_executor(None, tts_service.play_text, speech_segments[i])
                 
-            # Speak the next segment if available
-            if i+1 < len(speech_segments):
-                logger.info(f"Speaking segment: '{speech_segments[i+1]}'")
-                await loop.run_in_executor(None, tts_service.play_text, speech_segments[i+1])
+                # Brief pause between speech-movement pairs for natural flow
+                # Only pause between segments, not after the last one
+                if i < len(speech_segments) - 1:
+                    await asyncio.sleep(0.2)
         
         return True
     except Exception as e:
@@ -352,7 +372,9 @@ async def generate_response_with_openai(input_text, context=None):
 
 async def handle_synchronized_speech(request):
     """
-    Handle requests for synchronized speech with movements using a structured JSON approach.
+    Handle synchronized speech and movement requests.
+    This improved version uses a direct JSON parsing approach
+    rather than text marker parsing and processes in the background.
     """
     data = await request.json()
     text = data.get("text", "")
@@ -360,47 +382,105 @@ async def handle_synchronized_speech(request):
     if not text:
         return web.Response(text="No text provided", status=400)
     
-    # Check if synchronized movements are enabled
-    enable_sync = getattr(settings, 'enable_synchronized_movements', True)
-    
-    if not enable_sync:
-        # If disabled, just use regular TTS
-        logger.info("Synchronized movements disabled, using regular TTS")
+    # Check if OpenAI API key is available
+    openai_api_key = settings.openai_api_key
+    if not openai_api_key:
+        logger.warning("No OpenAI API key available for synchronized speech")
+        # Fallback to regular TTS
         await request.app["event_bus"].publish("text_received", text)
-        return web.json_response({"status": "fallback_to_tts", "text": text})
+        return web.json_response({"status": "fallback_to_tts", "reason": "no_api_key"})
     
+    # Get the model to use
+    model = getattr(settings, 'movement_analysis_model', 'gpt-3.5-turbo')
+    
+    # Start a background task for processing
+    asyncio.create_task(process_synchronized_speech(
+        request.app["tts_service"],
+        request.app["owl"],
+        text,
+        openai_api_key,
+        model
+    ))
+    
+    # Return immediate response
+    return web.json_response({
+        "status": "processing",
+        "text": text,
+        "model": model
+    })
+
+async def process_synchronized_speech(tts_service, owl, text, api_key, model):
+    """
+    Process text with OpenAI and execute speech with synchronized movements.
+    In this natural implementation, movements precede speech.
+    """
     try:
-        # Get the structured analysis with separate speech segments and movements
-        logger.info(f"Processing text for synchronized speech: {text}")
-        structured_sequence = await analyze_with_openai_json(text)
+        # Step 1: Analyze with OpenAI
+        logger.info(f"Analyzing text with OpenAI: {text[:50]}...")
+        result = await analyze_with_openai(text, api_key, model)
         
-        if not structured_sequence or "speech_segments" not in structured_sequence:
-            logger.warning("Failed to get valid structured sequence, falling back to regular TTS")
-            await request.app["event_bus"].publish("text_received", text)
-            return web.json_response({"status": "fallback_to_tts", "text": text})
+        if not result:
+            logger.warning("Failed to get valid result from OpenAI")
+            # Fallback to regular TTS
+            tts_service.play_text(text)
+            return
         
-        # Execute the structured sequence
-        success = await execute_structured_sequence(
-            request.app["tts_service"],
-            request.app["owl"],
-            structured_sequence
-        )
+        # Step 2: Extract segments
+        movements = result.get("movements", [])
+        text_segments = result.get("text_segments", [])
         
-        if success:
-            return web.json_response({
-                "status": "executed", 
-                "text": text,
-                "segments": len(structured_sequence.get("speech_segments", [])),
-                "movements": len(structured_sequence.get("movements", []))
-            })
-        else:
-            # Fall back to regular TTS if execution fails
-            logger.warning("Failed to execute structured sequence, falling back to regular TTS")
-            await request.app["event_bus"].publish("text_received", text)
-            return web.json_response({"status": "fallback_to_tts", "text": text})
+        # Validate segments
+        if not text_segments or not movements:
+            logger.warning("Missing segments in OpenAI response")
+            # Fallback to regular TTS
+            tts_service.play_text(text)
+            return
             
+        logger.info(f"Received {len(movements)} movements and {len(text_segments)} text segments")
+        
+        # Step 3: Execute movement-speech pairs
+        # Ensure equal length for pairing
+        pair_count = min(len(movements), len(text_segments))
+        
+        for i in range(pair_count):
+            # First execute movement (non-blocking)
+            movement = movements[i]
+            if isinstance(movement, dict) and "type" in movement:
+                move_type = movement.get("type")
+                duration = movement.get("duration", 0.8)
+                
+                # Start the movement
+                await execute_movement(owl, move_type)
+                
+                # Brief pause to let movement get started
+                await asyncio.sleep(0.3)
+                
+                # Start speech while movement continues
+                text_segment = text_segments[i].strip()
+                if text_segment:
+                    logger.info(f"Speaking: {text_segment[:50]}...")
+                    tts_service.play_text(text_segment)
+                    
+                # Wait for completion before next pair (but less than full duration)
+                # This creates a slight overlap between segments
+                remaining_wait = max(0, duration - 0.3)
+                await asyncio.sleep(remaining_wait)
+            else:
+                logger.warning(f"Invalid movement format: {movement}")
+        
+        # Handle any remaining text segments if there are more text than movements
+        for i in range(pair_count, len(text_segments)):
+            text_segment = text_segments[i].strip()
+            if text_segment:
+                logger.info(f"Speaking remaining segment: {text_segment[:50]}...")
+                tts_service.play_text(text_segment)
+        
+        logger.info("Finished synchronized speech execution")
+        
     except Exception as e:
-        logger.error(f"Error in synchronized speech: {e}")
-        # Fall back to regular TTS if there's an error
-        await request.app["event_bus"].publish("text_received", text)
-        return web.json_response({"status": "error_fallback_to_tts", "text": text, "error": str(e)})
+        logger.error(f"Error in synchronized speech processing: {e}", exc_info=True)
+        # Fallback to regular TTS
+        try:
+            tts_service.play_text(text)
+        except Exception as e2:
+            logger.error(f"Error in fallback TTS: {e2}")
