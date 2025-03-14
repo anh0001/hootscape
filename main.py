@@ -13,6 +13,7 @@ from audio.tts_service import TTSService
 from voice.recognition import VoiceSystem
 from voice.commands.handlers import HealthcareCommands
 from audio.soundscape import SoundscapeManager
+from utils.speech_movement_sync import SpeechMovementSync
 
 # Configure logging
 logging.basicConfig(
@@ -59,14 +60,15 @@ async def process_owl_movements(movements: list, owl_controller: OwlController):
             await loop.run_in_executor(None, move_func)
             await asyncio.sleep(duration)
 
-async def start_http_server(event_bus, owl, tts_service):
-    # Setup aiohttp app with the event bus and tts service in app context
+async def start_http_server(event_bus, owl, tts_service, speech_movement_sync):
+    # Setup aiohttp app with all required services in app context
     app = web.Application()
     app["event_bus"] = event_bus
     app["owl"] = owl
     app["tts_service"] = tts_service
+    app["speech_movement_sync"] = speech_movement_sync  # Add speech_movement_sync to app context
     app.router.add_post('/owl/command', handle_owl_command)
-    # Add the new endpoint for synchronized speech
+    # Add the endpoint for synchronized speech
     from api.owl_api_controller import handle_synchronized_speech
     app.router.add_post('/owl/synchronized_speech', handle_synchronized_speech)
     
@@ -172,6 +174,14 @@ async def main():
             timeout=settings.robot_timeout
         )
         
+        # Initialize speech movement synchronization
+        speech_movement_sync = SpeechMovementSync(
+            tts_service, 
+            owl, 
+            settings.openai_api_key, 
+            settings.movement_analysis_model
+        )
+        
         # Initialize soundscape manager
         soundscape = SoundscapeManager(event_bus)
         
@@ -192,8 +202,10 @@ async def main():
             lambda movements: process_owl_movements(movements, owl)
         )
         
-        # Start HTTP server task
-        http_task = asyncio.create_task(start_http_server(event_bus, owl, tts_service))
+        # Start HTTP server task with speech_movement_sync
+        http_task = asyncio.create_task(
+            start_http_server(event_bus, owl, tts_service, speech_movement_sync)
+        )
         
         # Start voice recognition task
         voice_task = asyncio.create_task(voice_system.start())
