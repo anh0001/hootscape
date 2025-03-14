@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     elevenlabs_voice_id: str = Field(default="", env="ELEVENLABS_VOICE_ID")
     tts_sample_rate: int = Field(default=24000, env="TTS_SAMPLE_RATE")
 
+    # New settings for synchronized movement
+    enable_synchronized_movements: bool = Field(default=True, env="ENABLE_SYNCHRONIZED_MOVEMENTS")
+    movement_analysis_model: str = Field(default="gpt-3.5-turbo", env="MOVEMENT_ANALYSIS_MODEL")
+
     class Config:
         env_file = ".env"  # auto-load environment variables from .env
         extra = "allow"  # allow extra fields in .env file

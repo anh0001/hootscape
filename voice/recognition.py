@@ -167,6 +167,109 @@ class HealthcareNLP(TextProcessor):
         
         # Push the frame to the next component
         await self.push_frame(frame, direction)
+    
+    async def handle_command(self, command_data):
+        """Handle processed voice commands with options for synchronized speech"""
+        logger.info(f"Command detected: {json.dumps(command_data)}")
+        
+        # Publish to event bus to notify other components
+        await self.event_bus.publish("voice_command", command_data)
+        
+        # Get intent and entities
+        intent = command_data["intent"]
+        entities = command_data.get("entities", {})
+        response_text = ""
+        
+        # Generate response based on intent
+        if intent == "medication_reminder":
+            medication = entities.get("medication", "your medication")
+            response_text = f"It's time to take {medication}. Would you like me to remind you again in an hour?"
+        elif intent == "emergency_assistance":
+            contact = entities.get("contact", "emergency services")
+            response_text = f"I'm contacting {contact} right away. Please stay calm and I'll stay with you."
+        elif intent == "health_check":
+            measure = entities.get("measure", "health")
+            response_text = f"Let's check your {measure}. Please follow the instructions on the screen."
+        elif intent == "social_interaction":
+            response_text = "I'm here to keep you company. Would you like to hear a story or perhaps talk about your day?"
+        elif intent == "system_control":
+            action = entities.get("action")
+            if action == "volume_up":
+                response_text = "I've increased the volume for you."
+            elif action == "volume_down":
+                response_text = "I've decreased the volume for you."
+        elif intent == "set_reminder":
+            response_text = "I'll remind you. Can you tell me when you need to be reminded?"
+        elif intent == "general_query":
+            # For general queries, try to use OpenAI if available
+            original_text = command_data.get("original_text", "")
+            if hasattr(settings, 'speech_recognition_provider') and \
+               settings.speech_recognition_provider == SpeechRecognitionProvider.OPENAI and \
+               settings.openai_api_key:
+                context = f"Intent detected: {intent}. Entities: {entities}"
+                from api.owl_api_controller import generate_response_with_openai
+                response_text = await generate_response_with_openai(original_text, context)
+            else:
+                response_text = self.generate_simple_response(intent, entities, original_text)
+        else:
+            # If no predefined response, generate one
+            original_text = command_data.get("original_text", "")
+            if hasattr(settings, 'speech_recognition_provider') and \
+               settings.speech_recognition_provider == SpeechRecognitionProvider.OPENAI and \
+               settings.openai_api_key:
+                context = f"Intent detected: {intent}. Entities: {entities}"
+                from api.owl_api_controller import generate_response_with_openai
+                response_text = await generate_response_with_openai(original_text, context)
+            else:
+                response_text = self.generate_simple_response(intent, entities, original_text)
+        
+        # Based on settings, choose synchronized or regular TTS
+        if response_text:
+            if hasattr(settings, 'enable_synchronized_movements') and settings.enable_synchronized_movements and \
+               settings.openai_api_key:
+                await self.send_synchronized_speech(response_text)
+            else:
+                # Use the original event bus approach for TTS
+                await self.event_bus.publish("text_received", response_text)
+    
+    def generate_simple_response(self, intent, entities, original_text):
+        """Generate a simple response when OpenAI isn't available"""
+        # Simple template-based responses
+        if "help" in original_text.lower():
+            return "I'm here to help. You can ask me about medications, health checks, or emergency assistance."
+        
+        if any(word in original_text.lower() for word in ["thank", "thanks"]):
+            return "You're welcome. I'm happy to assist you."
+        
+        # Default responses by intent
+        intent_responses = {
+            "unknown": "I'm not sure I understood. Could you please rephrase that?",
+            "medication_reminder": "I can help you with your medication schedule.",
+            "emergency_assistance": "Do you need emergency help? I can contact someone for you.",
+            "health_check": "I can help monitor your health. What would you like to check?",
+            "social_interaction": "I'm here to keep you company. How are you feeling today?",
+            "set_reminder": "I'd be happy to set a reminder for you.",
+            "general_query": "I'll try to answer your question as best I can."
+        }
+        
+        return intent_responses.get(intent, "How can I help you today?")
+    
+    async def send_synchronized_speech(self, text):
+        """Send text to the synchronized speech API endpoint"""
+        try:
+            import aiohttp
+            
+            endpoint = "http://localhost:9123/owl/synchronized_speech"  # Adjust port if needed
+            async with aiohttp.ClientSession() as session:
+                async with session.post(endpoint, json={"text": text}) as response:
+                    if response.status != 200:
+                        # Fall back to regular TTS if API call fails
+                        logger.warning(f"Synchronized speech API call failed, falling back to regular TTS")
+                        await self.event_bus.publish("text_received", text)
+        except Exception as e:
+            logger.error(f"Error sending to synchronized speech endpoint: {e}")
+            # Fall back to regular TTS
+            await self.event_bus.publish("text_received", text)
 
 class OpenAIAudioProcessor(FrameProcessor):
     """

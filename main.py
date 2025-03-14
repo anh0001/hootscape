@@ -66,6 +66,9 @@ async def start_http_server(event_bus, owl, tts_service):
     app["owl"] = owl
     app["tts_service"] = tts_service
     app.router.add_post('/owl/command', handle_owl_command)
+    # Add the new endpoint for synchronized speech
+    from api.owl_api_controller import handle_synchronized_speech
+    app.router.add_post('/owl/synchronized_speech', handle_synchronized_speech)
     
     # Use AppRunner and TCPSite for non-blocking startup
     runner = web.AppRunner(app)
