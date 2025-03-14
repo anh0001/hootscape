@@ -38,9 +38,9 @@ async def execute_movement(owl, movement_type, duration=1.0):
 async def execute_movement_sequence(owl, movements):
     for move in movements:
         move_type = move.get("type")
-        duration = move.get("duration", 1)
+        # Removed duration sleep
         await execute_movement(owl, move_type)
-        await asyncio.sleep(duration)
+        # No sleep delay between movements
 
 async def handle_owl_command(request):
     data = await request.json()
@@ -256,8 +256,6 @@ async def execute_speech_movement_sequence(tts_service, owl, sequence):
         if item["type"] == "speech":
             # Execute speech in a background task
             await loop.run_in_executor(None, tts_service.play_text, item["text"])
-            # # Add a small pause to let speech start
-            await asyncio.sleep(0.3)
         elif item["type"] == "movement":
             movement = item["movement"]
             movement_map = {
@@ -271,9 +269,9 @@ async def execute_speech_movement_sequence(tts_service, owl, sequence):
             
             move_func = movement_map.get(movement["type"])
             if move_func:
-                # Execute movement
+                # Execute movement - no sleep delay
                 await loop.run_in_executor(None, move_func)
-                await asyncio.sleep(movement["duration"])
+                # Removed: await asyncio.sleep(movement["duration"])
 
 async def execute_structured_sequence(tts_service, owl, sequence_data):
     """
@@ -304,27 +302,20 @@ async def execute_structured_sequence(tts_service, owl, sequence_data):
             if i < len(movements):
                 movement = movements[i]
                 move_type = movement.get("type")
-                duration = movement.get("duration", 1)
                 move_func = movement_map.get(move_type)
                 
                 if move_func:
-                    logger.info(f"Executing movement: type={move_type}, duration={duration}")
+                    logger.info(f"Executing movement: type={move_type}")
                     # Start the movement
                     await loop.run_in_executor(None, move_func)
-                    
-                    # Brief pause to let movement get underway before speech starts
-                    # Use a shorter pause (0.3s) to create natural overlap
-                    await asyncio.sleep(0.3)
+                    # Removed: await asyncio.sleep(0.3)
             
-            # Speak the corresponding segment while movement is still completing
+            # Speak the corresponding segment immediately after movement begins
             if i < len(speech_segments) and speech_segments[i]:
                 logger.info(f"Speaking segment: '{speech_segments[i]}'")
                 await loop.run_in_executor(None, tts_service.play_text, speech_segments[i])
                 
-                # Brief pause between speech-movement pairs for natural flow
-                # Only pause between segments, not after the last one
-                if i < len(speech_segments) - 1:
-                    await asyncio.sleep(0.2)
+                # Removed: await asyncio.sleep(0.2)
         
         return True
     except Exception as e:
@@ -447,24 +438,17 @@ async def process_synchronized_speech(tts_service, owl, text, api_key, model):
             movement = movements[i]
             if isinstance(movement, dict) and "type" in movement:
                 move_type = movement.get("type")
-                duration = movement.get("duration", 0.8)
                 
                 # Start the movement
                 await execute_movement(owl, move_type)
                 
-                # Brief pause to let movement get started
-                await asyncio.sleep(0.3)
-                
-                # Start speech while movement continues
+                # Immediately start speech (no pause)
                 text_segment = text_segments[i].strip()
                 if text_segment:
                     logger.info(f"Speaking: {text_segment[:50]}...")
                     tts_service.play_text(text_segment)
-                    
-                # Wait for completion before next pair (but less than full duration)
-                # This creates a slight overlap between segments
-                remaining_wait = max(0, duration - 0.3)
-                await asyncio.sleep(remaining_wait)
+                
+                # Removed: await asyncio.sleep(remaining_wait)
             else:
                 logger.warning(f"Invalid movement format: {movement}")
         
