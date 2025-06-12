@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = Field(default="", env="ELEVENLABS_API_KEY")
     elevenlabs_voice_id: str = Field(default="", env="ELEVENLABS_VOICE_ID")
     tts_sample_rate: int = Field(default=24000, env="TTS_SAMPLE_RATE")
+    tts_request_timeout: int = Field(default=10, env="TTS_REQUEST_TIMEOUT")
 
     # New settings for synchronized movement
     enable_synchronized_movements: bool = Field(default=True, env="ENABLE_SYNCHRONIZED_MOVEMENTS")
