@@ -18,7 +18,8 @@ from pipecat.transports.base_transport import TransportParams
 from pipecat.services.whisper import WhisperSTTService, Model
 from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
 from pipecat.processors.frame_processor import FrameProcessor
-from pydantic import BaseModel, ConfigDictfrom core.event_bus
+from pydantic import BaseModel, ConfigDict, Field
+from core.event_bus import EventBus
 from core.event_bus import EventBus
 
 # Try to import OpenAI service from pipecat if available
