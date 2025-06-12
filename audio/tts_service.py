@@ -1,8 +1,12 @@
 from gtts import gTTS
+from gtts.tts import gTTSError
 from io import BytesIO
 import pygame
 import threading
 from typing import Callable, Optional
+import logging
+import requests
+from config.settings import settings
 
 class TTSService:
     def __init__(self):
@@ -10,6 +14,8 @@ class TTSService:
         if not pygame.mixer.get_init():
             pygame.mixer.init()
         self._lock = threading.Lock()
+        self.logger = logging.getLogger(__name__)
+        self._timeout = getattr(settings, "tts_request_timeout", 10)
 
     def play_text(
         self,
@@ -38,9 +44,17 @@ class TTSService:
                     on_start()
 
                 # Convert text to speech
-                tts = gTTS(text=text, lang=lang)
+                tts = gTTS(text=text, lang=lang, timeout=self._timeout)
                 audio_fp = BytesIO()
-                tts.write_to_fp(audio_fp)
+
+                try:
+                    tts.write_to_fp(audio_fp)
+                except (gTTSError, requests.RequestException) as e:
+                    self.logger.error(f"TTS generation failed: {e}")
+                    if callable(on_end):
+                        on_end()
+                    return
+
                 audio_fp.seek(0)
 
                 # Load and play the audio
@@ -52,7 +66,7 @@ class TTSService:
                     pygame.time.wait(100)
 
             except Exception as e:
-                print(f"[ERROR] TTS playback failed: {e}")
+                self.logger.error(f"TTS playback failed: {e}")
             finally:
                 if callable(on_end):
                     on_end()
