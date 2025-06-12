@@ -55,11 +55,16 @@ class HealthcareNLP(TextProcessor):
         command_handler: Optional[Callable] = Field(default=None, description="Callback for handling commands")
     
     def __init__(self, params: InputParams = None, **kwargs):
+        """Initialize the NLP processor and ensure a command handler is set."""
         # Initialize parent properly
         super().__init__(**kwargs)
-        
+
         # Create parameters if none provided
         self.nlp_params = params or self.InputParams()
+
+        # Default to this class's handle_command if no handler provided
+        if self.nlp_params.command_handler is None:
+            self.nlp_params.command_handler = self.handle_command
         
         # Initialize MarkdownTextFilter for text preprocessing if needed
         self.text_filter = MarkdownTextFilter(
@@ -399,10 +404,7 @@ class VoiceSystem:
         """Handle processed voice commands"""
         logger.info(f"Command detected: {json.dumps(command_data)}")
         
-        # Publish to event bus to notify other components
-        await self.event_bus.publish("voice_command", command_data)
-        
-        # Also publish text response for TTS
+        # Generate a text response for TTS
         intent = command_data["intent"]
         response_text = ""
         
@@ -530,9 +532,7 @@ class VoiceSystem:
             
             # Create NLP service for intent classification
             logger.info("Initializing NLP service...")
-            nlp_service = HealthcareNLP(
-                HealthcareNLP.InputParams(command_handler=self.handle_command)
-            )
+            nlp_service = HealthcareNLP()
             pipeline_components.append(nlp_service)
             logger.info("NLP service initialized successfully")
             
