@@ -565,5 +565,32 @@ class VoiceSystem:
                             
             logger.info("Voice recognition system stopped successfully")
         except Exception as e:
-            logger.error(f"Error while stopping voice recognition system: {e}", exc_info=True)
+            logger.error(
+                f"Error while stopping voice recognition system: {e}",
+                exc_info=True,
+            )
             # Don't re-raise as this is cleanup code
+
+    async def pause(self):
+        """Pause audio input if supported."""
+        try:
+            if self.transport:
+                if hasattr(self.transport, "pause"):
+                    self.transport.pause()
+                elif hasattr(self.transport, "pause_input"):
+                    self.transport.pause_input()
+            logger.info("Voice system paused")
+        except Exception as e:
+            logger.error(f"Failed to pause voice system: {e}")
+
+    async def resume(self):
+        """Resume audio input if supported."""
+        try:
+            if self.transport:
+                if hasattr(self.transport, "resume"):
+                    self.transport.resume()
+                elif hasattr(self.transport, "resume_input"):
+                    self.transport.resume_input()
+            logger.info("Voice system resumed")
+        except Exception as e:
+            logger.error(f"Failed to resume voice system: {e}")
