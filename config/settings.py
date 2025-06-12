@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     enable_synchronized_movements: bool = Field(default=True, env="ENABLE_SYNCHRONIZED_MOVEMENTS")
     movement_analysis_model: str = Field(default="gpt-3.5-turbo", env="MOVEMENT_ANALYSIS_MODEL")
 
+    response_generation_model: str = Field(default="gpt-3.5-turbo", env="RESPONSE_GENERATION_MODEL")
+
     class Config:
         env_file = ".env"  # auto-load environment variables from .env
         extra = "allow"  # allow extra fields in .env file

@@ -137,6 +137,7 @@ async def analyze_with_openai(text, api_key, model="gpt-3.5-turbo"):
         - Etc.
 
         Make sure each section of text has an associated movement that makes sense for its emotional content.
+        This is for an elderly healthcare companion, so movements should be gentle and reassuring.
 
         Text to analyze: {text}
         """
@@ -145,7 +146,7 @@ async def analyze_with_openai(text, api_key, model="gpt-3.5-turbo"):
             model=model,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": "You analyze text and recommend owl robot movements. Return ONLY valid JSON in the format specified."},
+                {"role": "system", "content": "You analyze text and recommend gentle, caring owl robot movements for elderly healthcare companions. Return ONLY valid JSON in the format specified."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7
@@ -337,13 +338,21 @@ async def generate_response_with_openai(input_text, context=None):
         client = OpenAI(api_key=api_key)
         
         prompt = f"""
-        Generate a friendly, helpful response for an elderly healthcare companion robot (owl).
-        The robot should sound gentle, patient, and reassuring.
+        You are a gentle, patient, and caring healthcare companion owl robot specifically designed for elderly users.
+        
+        Key characteristics:
+        - Speak clearly and at a moderate pace
+        - Use simple, warm language
+        - Show empathy and understanding
+        - Focus on health, safety, and companionship
+        - Be encouraging and positive
+        - Keep responses concise but caring
+        
         User input: {input_text}
         """
         
         if context:
-            prompt += f"\nContext: {context}"
+            prompt += f"\nAdditional context: {context}"
         
         model = settings.movement_analysis_model if hasattr(settings, 'movement_analysis_model') else "gpt-3.5-turbo"
         
@@ -351,12 +360,18 @@ async def generate_response_with_openai(input_text, context=None):
             client.chat.completions.create,
             model=model,
             messages=[
-                {"role": "system", "content": "You are a friendly healthcare companion owl robot that helps elderly users."},
+                {
+                    "role": "system", 
+                    "content": "You are a friendly, caring healthcare companion owl robot that helps elderly users. Always respond with warmth, patience, and clear communication suitable for seniors."
+                },
                 {"role": "user", "content": prompt}
-            ]
+            ],
+            temperature=0.7,  # Slightly creative but consistent
+            max_tokens=150    # Keep responses concise for elderly users
         )
         
         return response.choices[0].message.content
+        
     except Exception as e:
         logger.error(f"Error generating response with OpenAI: {e}")
         return "I'm sorry, I'm having trouble processing that right now. Can I help you with something else?"
