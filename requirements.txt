@@ -21,3 +21,5 @@ pyserial
 gTTS
 pydub
 pygame
+webrtcvad
+requests

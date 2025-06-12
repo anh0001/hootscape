@@ -34,6 +34,20 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
     openai_model: str = Field(default="whisper-1", env="OPENAI_MODEL")
 
+    # OpenAI buffering and VAD settings
+    openai_buffer_duration_ms: int = Field(
+        default=3000, env="OPENAI_BUFFER_DURATION_MS",
+        description="Audio buffer duration before sending to OpenAI (ms)"
+    )
+    openai_enable_vad: bool = Field(
+        default=False, env="OPENAI_ENABLE_VAD",
+        description="Enable voice activity detection when buffering audio"
+    )
+    openai_vad_silence_ms: int = Field(
+        default=800, env="OPENAI_VAD_SILENCE_MS",
+        description="Amount of silence required to trigger processing (ms)"
+    )
+
     # ElevenLabs TTS settings
     elevenlabs_api_key: str = Field(default="", env="ELEVENLABS_API_KEY")
     elevenlabs_voice_id: str = Field(default="", env="ELEVENLABS_VOICE_ID")

@@ -7,6 +7,7 @@ import logging
 import tempfile
 import io
 import wave
+import audioop
 
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
@@ -281,6 +282,8 @@ class OpenAIAudioProcessor(FrameProcessor):
         api_key: str = Field(default="", description="OpenAI API key")
         model: str = Field(default="whisper-1", description="OpenAI model to use")
         buffer_duration_ms: int = Field(default=3000, description="Duration of audio to buffer before processing (ms)")
+        enable_vad: bool = Field(default=False, description="Enable VAD based buffering")
+        vad_silence_ms: int = Field(default=800, description="Required silence duration to trigger processing (ms)")
         sample_rate: int = Field(default=16000, description="Sample rate of the audio")
         language: str = Field(default="en", description="Language code")
         
@@ -290,6 +293,7 @@ class OpenAIAudioProcessor(FrameProcessor):
         self.audio_buffer = b""
         self.last_process_time = 0
         self.is_processing = False
+        self.silence_start = None
         
     async def process_frame(self, frame, direction):
         await super().process_frame(frame, direction)
@@ -303,24 +307,36 @@ class OpenAIAudioProcessor(FrameProcessor):
         self.audio_buffer += frame.audio
         current_time = asyncio.get_event_loop().time()
         
-        # Check if we should process the buffer (either enough time has passed or buffer is large enough)
-        buffer_duration = len(self.audio_buffer) / (self.params.sample_rate * 2)  # 16-bit audio = 2 bytes per sample
+        # Determine buffered duration
+        buffer_duration = len(self.audio_buffer) / (self.params.sample_rate * 2)
         buffer_duration_ms = buffer_duration * 1000
-        
-        if (buffer_duration_ms >= self.params.buffer_duration_ms and 
-            not self.is_processing and 
-            current_time - self.last_process_time >= 1.0):  # Don't process more than once per second
-            
+
+        should_process = False
+
+        if self.params.enable_vad:
+            rms = audioop.rms(frame.audio, 2) if len(frame.audio) >= 2 else 0
+            silent = rms < 500
+
+            if silent:
+                if self.silence_start is None:
+                    self.silence_start = current_time
+                elif (current_time - self.silence_start) * 1000 >= self.params.vad_silence_ms:
+                    should_process = True
+            else:
+                self.silence_start = None
+                if buffer_duration_ms >= self.params.buffer_duration_ms:
+                    should_process = True
+        else:
+            if buffer_duration_ms >= self.params.buffer_duration_ms:
+                should_process = True
+
+        if (should_process and not self.is_processing and current_time - self.last_process_time >= 1.0):
             self.is_processing = True
             try:
-                # Process the audio buffer
                 text = await self._transcribe_audio(self.audio_buffer)
                 if text:
-                    # Create a text frame and push it
                     text_frame = TextFrame(text=text)
                     await self.push_frame(text_frame, direction)
-                    
-                # Reset the buffer
                 self.audio_buffer = b""
                 self.last_process_time = current_time
             finally:
@@ -471,6 +487,9 @@ class VoiceSystem:
                             OpenAIAudioProcessor.InputParams(
                                 api_key=settings.openai_api_key,
                                 model=getattr(settings, 'openai_model', 'whisper-1'),
+                                buffer_duration_ms=getattr(settings, 'openai_buffer_duration_ms', 3000),
+                                enable_vad=getattr(settings, 'openai_enable_vad', False),
+                                vad_silence_ms=getattr(settings, 'openai_vad_silence_ms', 800),
                                 language="en"
                             )
                         )
@@ -491,6 +510,9 @@ class VoiceSystem:
                             OpenAIAudioProcessor.InputParams(
                                 api_key=settings.openai_api_key,
                                 model=getattr(settings, 'openai_model', 'whisper-1'),
+                                buffer_duration_ms=getattr(settings, 'openai_buffer_duration_ms', 3000),
+                                enable_vad=getattr(settings, 'openai_enable_vad', False),
+                                vad_silence_ms=getattr(settings, 'openai_vad_silence_ms', 800),
                                 language="en"
                             )
                         )
