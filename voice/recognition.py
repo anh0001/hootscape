@@ -18,7 +18,7 @@ from pipecat.transports.base_transport import TransportParams
 from pipecat.services.whisper import WhisperSTTService, Model
 from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
 from pipecat.processors.frame_processor import FrameProcessor
-from pydantic import Field, BaseModel
+from pydantic import BaseModel, ConfigDictfrom core.event_bus
 from core.event_bus import EventBus
 
 # Try to import OpenAI service from pipecat if available
@@ -55,6 +55,8 @@ class HealthcareNLP(TextProcessor):
     class InputParams(BaseModel):
         command_handler: Optional[Callable] = Field(default=None, description="Callback for handling commands")
         event_bus: Optional[EventBus] = Field(default=None, description="Event bus for publishing messages")
+        
+        model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(self, params: InputParams = None, event_bus: Optional[EventBus] = None, **kwargs):
         """Initialize the NLP processor and ensure a command handler is set."""
