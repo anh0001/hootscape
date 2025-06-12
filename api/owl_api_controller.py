@@ -105,10 +105,10 @@ async def handle_owl_command(request):
 async def analyze_with_openai(text, api_key, model="gpt-3.5-turbo"):
     """Send text to OpenAI to analyze and add movement markers."""
     try:
-        from openai import OpenAI
+        from openai import AsyncOpenAI
         import json
-        
-        client = OpenAI(api_key=api_key)
+
+        client = AsyncOpenAI(api_key=api_key)
         
         prompt = f"""
         Your task is to analyze this text and create a natural sequence of owl robot movements followed by speech.
@@ -142,7 +142,7 @@ async def analyze_with_openai(text, api_key, model="gpt-3.5-turbo"):
         Text to analyze: {text}
         """
         
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=model,
             response_format={"type": "json_object"},
             messages=[
@@ -173,14 +173,14 @@ async def analyze_with_openai_json(text):
     and movement commands instead of inserting markers into the text.
     """
     try:
-        from openai import OpenAI
+        from openai import AsyncOpenAI
         
         api_key = os.getenv("OPENAI_API_KEY") or settings.openai_api_key
         if not api_key:
             logger.warning("OpenAI API key not found, returning original text")
             return {"speech_segments": [text], "movements": []}
             
-        client = OpenAI(api_key=api_key)
+        client = AsyncOpenAI(api_key=api_key)
         
         model = settings.movement_analysis_model if hasattr(settings, 'movement_analysis_model') else "gpt-3.5-turbo"
         
@@ -328,14 +328,14 @@ async def generate_response_with_openai(input_text, context=None):
     Generate a response with OpenAI when no predefined response exists.
     """
     try:
-        from openai import OpenAI
+        from openai import AsyncOpenAI
         
         api_key = os.getenv("OPENAI_API_KEY") or settings.openai_api_key
         if not api_key:
             logger.warning("OpenAI API key not found, returning fallback response")
             return "I'm sorry, I'm having trouble processing that right now. Can I help you with something else?"
             
-        client = OpenAI(api_key=api_key)
+        client = AsyncOpenAI(api_key=api_key)
         
         prompt = f"""
         You are a gentle, patient, and caring healthcare companion owl robot specifically designed for elderly users.
@@ -356,12 +356,11 @@ async def generate_response_with_openai(input_text, context=None):
         
         model = settings.movement_analysis_model if hasattr(settings, 'movement_analysis_model') else "gpt-3.5-turbo"
         
-        response = await asyncio.to_thread(
-            client.chat.completions.create,
+        response = await client.chat.completions.create(
             model=model,
             messages=[
                 {
-                    "role": "system", 
+                    "role": "system",
                     "content": "You are a friendly, caring healthcare companion owl robot that helps elderly users. Always respond with warmth, patience, and clear communication suitable for seniors."
                 },
                 {"role": "user", "content": prompt}
