@@ -27,13 +27,26 @@ logging.basicConfig(
 
 logger = logging.getLogger("main")
 
-async def process_text(text: str, tts_service: TTSService):
-    """
-    Asynchronous wrapper for playing text.
-    """
+async def process_text(text: str, tts_service: TTSService, event_bus: EventBus):
+    """Asynchronously synthesize speech while pausing voice capture."""
+
     logger.info(f"Processing text: {text}")
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, tts_service.play_text, text)
+
+    def _pause():
+        asyncio.run_coroutine_threadsafe(event_bus.publish("pause_voice"), loop).result()
+
+    def _resume():
+        asyncio.run_coroutine_threadsafe(event_bus.publish("resume_voice"), loop).result()
+
+    await loop.run_in_executor(
+        None,
+        tts_service.play_text,
+        text,
+        "en",
+        _pause,
+        _resume,
+    )
 
 async def process_owl_movements(movements: list, owl_controller: OwlController):
     """
@@ -107,7 +120,7 @@ async def startup_sequence(owl_controller, soundscape, event_bus, tts_service):
     # Welcome message
     welcome_text = "Hello, I'm your owl companion. I'm here to help you with medication reminders, " + \
                   "health monitoring, and to keep you company. Just say 'Hey Owl' to get my attention."
-    await process_text(welcome_text, tts_service)
+    await process_text(welcome_text, tts_service, event_bus)
 
 async def shutdown(tasks, session, voice_system, soundscape, shutdown_event):
     """
@@ -193,9 +206,12 @@ async def main():
         
         # Subscribe event handlers
         event_bus.subscribe(
-            "text_received", 
-            lambda text: process_text(text, tts_service)
+            "text_received",
+            lambda text: process_text(text, tts_service, event_bus)
         )
+
+        event_bus.subscribe("pause_voice", voice_system.pause)
+        event_bus.subscribe("resume_voice", voice_system.resume)
         
         event_bus.subscribe(
             "owl_movements",
