@@ -8,18 +8,18 @@ import tempfile
 import io
 import wave
 import audioop
+import time
 
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
-from pipecat.frames.frames import TextFrame, InputAudioRawFrame, OutputAudioRawFrame  # Updated import
+from pipecat.frames.frames import TextFrame, InputAudioRawFrame, OutputAudioRawFrame
 from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
 from pipecat.transports.base_transport import TransportParams
 from pipecat.services.whisper import WhisperSTTService, Model
 from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
 from pipecat.processors.frame_processor import FrameProcessor
 from pydantic import BaseModel, ConfigDict, Field
-from core.event_bus import EventBus
 from core.event_bus import EventBus
 
 # Try to import OpenAI service from pipecat if available
@@ -82,6 +82,10 @@ class HealthcareNLP(TextProcessor):
                 filter_tables=True
             )
         )
+        
+        # Add processing control to prevent overlapping
+        self.last_process_time = 0
+        self.processing_cooldown = 2.0  # 2 seconds between processing
     
     async def process_frame(self, frame, direction):
         await super().process_frame(frame, direction)
@@ -93,81 +97,98 @@ class HealthcareNLP(TextProcessor):
         text = frame.text.lower().strip()
         logger.info(f"Processing text: {text}")
         
-        # Skip processing if empty
-        if not text:
+        # Add cooldown to prevent rapid-fire processing
+        current_time = time.time()
+        if current_time - self.last_process_time < self.processing_cooldown:
+            logger.debug(f"Skipping processing due to cooldown")
             await self.push_frame(frame, direction)
             return
-            
-        # Check for wake word first
-        wake_words = ["hey owl", "hello owl", "owl", "hey there"]
-        is_wake_word = any(text.startswith(word) for word in wake_words)
         
-        # If wake word detected, clean the text
-        if is_wake_word:
-            for word in wake_words:
-                if text.startswith(word):
-                    text = text[len(word):].strip()
-                    break
-        else:
-            # No wake word, don't process further
+        # Skip processing if empty or too short
+        if not text or len(text) < 3:
+            await self.push_frame(frame, direction)
+            return
+        
+        # Filter out common transcription artifacts
+        artifacts = ["thank you for watching", "thanks for watching", "thank you", "you"]
+        if any(text.strip() == artifact for artifact in artifacts):
+            logger.debug(f"Skipping artifact: {text}")
             await self.push_frame(frame, direction)
             return
             
-        # Basic intent classification for healthcare
-        intent = "unknown"
+        # Improved wake word detection
+        wake_words = ["hey owl", "hello owl", "hi owl"]
+        is_wake_word = False
+        wake_word_used = ""
+        
+        for word in wake_words:
+            if word in text:
+                is_wake_word = True
+                wake_word_used = word
+                # Extract text after wake word
+                parts = text.split(word, 1)
+                if len(parts) > 1:
+                    text = parts[1].strip()
+                else:
+                    text = ""
+                break
+        
+        # If no wake word, skip processing
+        if not is_wake_word:
+            logger.debug(f"No wake word detected in: {text}")
+            await self.push_frame(frame, direction)
+            return
+        
+        logger.info(f"Wake word '{wake_word_used}' detected, processing: '{text}'")
+        self.last_process_time = current_time
+        
+        # Better intent classification
+        intent = "greeting"  # Default for wake word with no additional text
         entities = {}
         
-        # Medication reminders
-        if any(word in text for word in ["medicine", "medication", "pill", "pills", "drug"]):
-            intent = "medication_reminder"
-            # Extract medication name if present
-            # This is a simple implementation - could be enhanced with better NLP
-            if "take" in text:
-                parts = text.split("take")
-                if len(parts) > 1:
-                    entities["medication"] = parts[1].strip()
-                    
-        # Emergency help
-        elif any(word in text for word in ["help", "emergency", "fall", "fallen", "hurt"]):
-            intent = "emergency_assistance"
-            if "call" in text:
-                for family in ["daughter", "son", "doctor", "nurse", "caregiver"]:
-                    if family in text:
-                        entities["contact"] = family
+        # If there's additional text after wake word, classify it
+        if text:
+            # Medication reminders
+            if any(word in text for word in ["medicine", "medication", "pill", "pills", "drug", "take"]):
+                intent = "medication_reminder"
+                # Try to extract medication name
+                for med in ["aspirin", "insulin", "blood pressure", "heart", "diabetes"]:
+                    if med in text:
+                        entities["medication"] = med
                         
-        # Health check-in
-        elif any(phrase in text for phrase in ["how am i", "my health", "feeling", "check up"]):
-            intent = "health_check"
-            for measure in ["blood pressure", "temperature", "heart rate", "sugar", "glucose"]:
-                if measure in text:
-                    entities["measure"] = measure
-                    
-        # Social interaction
-        elif any(word in text for word in ["lonely", "alone", "talk", "chat", "bored"]):
-            intent = "social_interaction"
-            
-        # System control
-        elif any(word in text for word in ["louder", "volume up", "turn up"]):
-            intent = "system_control"
-            entities["action"] = "volume_up"
-        elif any(word in text for word in ["quieter", "volume down", "turn down"]):
-            intent = "system_control"
-            entities["action"] = "volume_down"
-            
-        # Reminders
-        elif any(word in text for word in ["remind", "remember", "forget", "appointment"]):
-            intent = "set_reminder"
-            # Could extract time/date here with more sophisticated parsing
+            # Emergency help
+            elif any(word in text for word in ["help", "emergency", "call", "hurt", "pain", "sick"]):
+                intent = "emergency_assistance"
+                if "call" in text:
+                    for contact in ["doctor", "nurse", "family", "daughter", "son"]:
+                        if contact in text:
+                            entities["contact"] = contact
+                            
+            # Health check-in
+            elif any(phrase in text for phrase in ["how am i", "check", "health", "feeling", "blood pressure", "temperature"]):
+                intent = "health_check"
+                for measure in ["blood pressure", "temperature", "heart rate", "sugar", "glucose"]:
+                    if measure in text:
+                        entities["measure"] = measure
+                        
+            # Questions
+            elif any(word in text for word in ["what", "how", "when", "where", "time", "date", "weather"]):
+                intent = "general_query"
+                entities["query_text"] = text
+                
+            # Help requests
+            elif any(word in text for word in ["help", "assist", "support"]):
+                intent = "help_request"
+                
+            else:
+                # Default to social interaction for other text
+                intent = "social_interaction"
         
-        # General queries
-        elif any(word in text for word in ["what", "when", "how", "who", "where"]):
-            intent = "general_query"
-            entities["query_text"] = text
-            
         result = {
             "intent": intent,
             "entities": entities,
-            "original_text": text
+            "original_text": text,
+            "wake_word": wake_word_used
         }
         
         logger.info(f"Processed intent: {intent}")
@@ -183,7 +204,7 @@ class HealthcareNLP(TextProcessor):
         await self.push_frame(frame, direction)
     
     async def handle_command(self, command_data):
-        """Handle processed voice commands with options for synchronized speech"""
+        """Handle processed voice commands with better responses"""
         logger.info(f"Command detected: {json.dumps(command_data)}")
         
         # Publish to event bus to notify other components
@@ -192,55 +213,67 @@ class HealthcareNLP(TextProcessor):
         # Get intent and entities
         intent = command_data["intent"]
         entities = command_data.get("entities", {})
+        wake_word = command_data.get("wake_word", "hey owl")
+        original_text = command_data.get("original_text", "")
+        
+        # Better response generation
         response_text = ""
         
-        # Generate response based on intent
-        if intent == "medication_reminder":
+        if intent == "greeting":
+            responses = [
+                "Hello! I'm here and ready to help you. What do you need?",
+                "Hi there! How can I assist you today?",
+                "Hello! I'm listening. What would you like to do?",
+                "Hi! I'm your owl companion. How can I help?"
+            ]
+            import random
+            response_text = random.choice(responses)
+            
+        elif intent == "help_request":
+            response_text = ("I can help you with several things: medication reminders, health monitoring, "
+                           "emergency assistance, or just keep you company. What would you like to do?")
+            
+        elif intent == "medication_reminder":
             medication = entities.get("medication", "your medication")
-            response_text = f"It's time to take {medication}. Would you like me to remind you again in an hour?"
+            response_text = f"Let me help you with {medication}. Is it time to take it, or would you like me to set a reminder?"
+            
         elif intent == "emergency_assistance":
             contact = entities.get("contact", "emergency services")
-            response_text = f"I'm contacting {contact} right away. Please stay calm and I'll stay with you."
+            response_text = f"I understand you need help. I can contact {contact} for you. Should I do that now?"
+            
         elif intent == "health_check":
-            measure = entities.get("measure", "health")
-            response_text = f"Let's check your {measure}. Please follow the instructions on the screen."
+            measure = entities.get("measure", "your health")
+            response_text = f"Let's check {measure}. Do you have the equipment ready, or would you like instructions?"
+            
         elif intent == "social_interaction":
-            response_text = "I'm here to keep you company. Would you like to hear a story or perhaps talk about your day?"
-        elif intent == "system_control":
-            action = entities.get("action")
-            if action == "volume_up":
-                response_text = "I've increased the volume for you."
-            elif action == "volume_down":
-                response_text = "I've decreased the volume for you."
-        elif intent == "set_reminder":
-            response_text = "I'll remind you. Can you tell me when you need to be reminded?"
+            responses = [
+                "I'm happy to chat with you! How has your day been?",
+                "I'm here to keep you company. What's on your mind?",
+                "I'd love to talk with you. What would you like to discuss?",
+            ]
+            import random
+            response_text = random.choice(responses)
+            
         elif intent == "general_query":
-            # For general queries, try to use OpenAI if available
-            original_text = command_data.get("original_text", "")
-            if hasattr(settings, 'speech_recognition_provider') and \
-               settings.speech_recognition_provider == SpeechRecognitionProvider.OPENAI and \
-               settings.openai_api_key:
-                context = f"Intent detected: {intent}. Entities: {entities}"
-                from api.owl_api_controller import generate_response_with_openai
-                response_text = await generate_response_with_openai(original_text, context)
+            query = entities.get("query_text", original_text)
+            if "time" in query:
+                import datetime
+                current_time = datetime.datetime.now().strftime("%I:%M %p")
+                response_text = f"The current time is {current_time}."
+            elif "date" in query or "day" in query:
+                import datetime
+                current_date = datetime.datetime.now().strftime("%A, %B %d")
+                response_text = f"Today is {current_date}."
             else:
-                response_text = self.generate_simple_response(intent, entities, original_text)
+                response_text = f"You asked about: {query}. Let me see if I can help with that."
         else:
-            # If no predefined response, generate one
-            original_text = command_data.get("original_text", "")
-            if hasattr(settings, 'speech_recognition_provider') and \
-               settings.speech_recognition_provider == SpeechRecognitionProvider.OPENAI and \
-               settings.openai_api_key:
-                context = f"Intent detected: {intent}. Entities: {entities}"
-                from api.owl_api_controller import generate_response_with_openai
-                response_text = await generate_response_with_openai(original_text, context)
-            else:
-                response_text = self.generate_simple_response(intent, entities, original_text)
+            response_text = "I heard you, but I'm not sure what you'd like me to do. Could you try asking in a different way?"
         
         # Based on settings, choose synchronized or regular TTS
         if response_text:
-            if hasattr(settings, 'enable_synchronized_movements') and settings.enable_synchronized_movements and \
-               settings.openai_api_key:
+            if (hasattr(settings, 'enable_synchronized_movements') and 
+                settings.enable_synchronized_movements and 
+                settings.openai_api_key):
                 await self.send_synchronized_speech(response_text)
             else:
                 # Use the original event bus approach for TTS
@@ -248,25 +281,12 @@ class HealthcareNLP(TextProcessor):
     
     def generate_simple_response(self, intent, entities, original_text):
         """Generate a simple response when OpenAI isn't available"""
-        # Simple template-based responses
-        if "help" in original_text.lower():
+        if intent == "greeting":
+            return "Hello! How can I help you today?"
+        elif intent == "help_request":
             return "I'm here to help. You can ask me about medications, health checks, or emergency assistance."
-        
-        if any(word in original_text.lower() for word in ["thank", "thanks"]):
-            return "You're welcome. I'm happy to assist you."
-        
-        # Default responses by intent
-        intent_responses = {
-            "unknown": "I'm not sure I understood. Could you please rephrase that?",
-            "medication_reminder": "I can help you with your medication schedule.",
-            "emergency_assistance": "Do you need emergency help? I can contact someone for you.",
-            "health_check": "I can help monitor your health. What would you like to check?",
-            "social_interaction": "I'm here to keep you company. How are you feeling today?",
-            "set_reminder": "I'd be happy to set a reminder for you.",
-            "general_query": "I'll try to answer your question as best I can."
-        }
-        
-        return intent_responses.get(intent, "How can I help you today?")
+        else:
+            return "I'm listening. What would you like me to do?"
     
     async def send_synchronized_speech(self, text):
         """Send text to the synchronized speech API endpoint"""
@@ -294,9 +314,9 @@ class OpenAIAudioProcessor(FrameProcessor):
     class InputParams(BaseModel):
         api_key: str = Field(default="", description="OpenAI API key")
         model: str = Field(default="whisper-1", description="OpenAI model to use")
-        buffer_duration_ms: int = Field(default=3000, description="Duration of audio to buffer before processing (ms)")
-        enable_vad: bool = Field(default=False, description="Enable VAD based buffering")
-        vad_silence_ms: int = Field(default=800, description="Required silence duration to trigger processing (ms)")
+        buffer_duration_ms: int = Field(default=4000, description="Duration of audio to buffer before processing (ms)")
+        enable_vad: bool = Field(default=True, description="Enable VAD based buffering")
+        vad_silence_ms: int = Field(default=1000, description="Required silence duration to trigger processing (ms)")
         sample_rate: int = Field(default=16000, description="Sample rate of the audio")
         language: str = Field(default="en", description="Language code")
         
@@ -307,6 +327,8 @@ class OpenAIAudioProcessor(FrameProcessor):
         self.last_process_time = 0
         self.is_processing = False
         self.silence_start = None
+        # Add minimum buffer size to prevent short audio errors
+        self.min_buffer_size = self.params.sample_rate * 2 * 1  # 1 second minimum
         
     async def process_frame(self, frame, direction):
         await super().process_frame(frame, direction)
@@ -320,6 +342,11 @@ class OpenAIAudioProcessor(FrameProcessor):
         self.audio_buffer += frame.audio
         current_time = asyncio.get_event_loop().time()
         
+        # Check minimum buffer size first
+        if len(self.audio_buffer) < self.min_buffer_size:
+            await self.push_frame(frame, direction)
+            return
+        
         # Determine buffered duration
         buffer_duration = len(self.audio_buffer) / (self.params.sample_rate * 2)
         buffer_duration_ms = buffer_duration * 1000
@@ -327,8 +354,9 @@ class OpenAIAudioProcessor(FrameProcessor):
         should_process = False
 
         if self.params.enable_vad:
+            # Improved VAD logic
             rms = audioop.rms(frame.audio, 2) if len(frame.audio) >= 2 else 0
-            silent = rms < 500
+            silent = rms < 300  # Lower threshold for better detection
 
             if silent:
                 if self.silence_start is None:
@@ -337,21 +365,28 @@ class OpenAIAudioProcessor(FrameProcessor):
                     should_process = True
             else:
                 self.silence_start = None
+                # Process on longer buffers to avoid short audio errors
                 if buffer_duration_ms >= self.params.buffer_duration_ms:
                     should_process = True
         else:
             if buffer_duration_ms >= self.params.buffer_duration_ms:
                 should_process = True
 
-        if (should_process and not self.is_processing and current_time - self.last_process_time >= 1.0):
+        # Add cooldown between processing attempts
+        if (should_process and not self.is_processing and 
+            current_time - self.last_process_time >= 2.0 and  # 2 second cooldown
+            len(self.audio_buffer) >= self.min_buffer_size):
+            
             self.is_processing = True
             try:
                 text = await self._transcribe_audio(self.audio_buffer)
-                if text:
-                    text_frame = TextFrame(text=text)
+                if text and text.strip():
+                    text_frame = TextFrame(text=text.strip())
                     await self.push_frame(text_frame, direction)
                 self.audio_buffer = b""
                 self.last_process_time = current_time
+            except Exception as e:
+                logger.error(f"Error in transcription: {e}")
             finally:
                 self.is_processing = False
                 
@@ -364,6 +399,11 @@ class OpenAIAudioProcessor(FrameProcessor):
         """
         try:
             from openai import OpenAI
+            
+            # Validate audio data size
+            if len(audio_data) < self.min_buffer_size:
+                logger.debug(f"Audio buffer too small: {len(audio_data)} bytes")
+                return ""
             
             # Create the OpenAI client
             client = OpenAI(api_key=self.params.api_key)
@@ -378,6 +418,13 @@ class OpenAIAudioProcessor(FrameProcessor):
                     wav_file.setsampwidth(2)  # 16-bit
                     wav_file.setframerate(self.params.sample_rate)
                     wav_file.writeframes(audio_data)
+            
+            # Check file size before sending
+            file_size = os.path.getsize(temp_filename)
+            if file_size < 1024:  # Less than 1KB
+                logger.debug(f"WAV file too small: {file_size} bytes")
+                os.unlink(temp_filename)
+                return ""
             
             # Send to OpenAI API
             with open(temp_filename, "rb") as audio_file:
@@ -497,9 +544,9 @@ class VoiceSystem:
                             OpenAIAudioProcessor.InputParams(
                                 api_key=settings.openai_api_key,
                                 model=getattr(settings, 'openai_model', 'whisper-1'),
-                                buffer_duration_ms=getattr(settings, 'openai_buffer_duration_ms', 3000),
-                                enable_vad=getattr(settings, 'openai_enable_vad', False),
-                                vad_silence_ms=getattr(settings, 'openai_vad_silence_ms', 800),
+                                buffer_duration_ms=getattr(settings, 'openai_buffer_duration_ms', 4000),  # Increased
+                                enable_vad=getattr(settings, 'openai_enable_vad', True),  # Enabled by default
+                                vad_silence_ms=getattr(settings, 'openai_vad_silence_ms', 1000),  # Increased
                                 language="en"
                             )
                         )
@@ -520,9 +567,9 @@ class VoiceSystem:
                             OpenAIAudioProcessor.InputParams(
                                 api_key=settings.openai_api_key,
                                 model=getattr(settings, 'openai_model', 'whisper-1'),
-                                buffer_duration_ms=getattr(settings, 'openai_buffer_duration_ms', 3000),
-                                enable_vad=getattr(settings, 'openai_enable_vad', False),
-                                vad_silence_ms=getattr(settings, 'openai_vad_silence_ms', 800),
+                                buffer_duration_ms=getattr(settings, 'openai_buffer_duration_ms', 4000),
+                                enable_vad=getattr(settings, 'openai_enable_vad', True),
+                                vad_silence_ms=getattr(settings, 'openai_vad_silence_ms', 1000),
                                 language="en"
                             )
                         )

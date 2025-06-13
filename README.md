@@ -287,6 +287,13 @@ curl -X POST -H "Content-Type: application/json" -d '{
 }' http://localhost:9123/owl/command
 ```
 
+kill the server process if needed:
+
+```bash
+# To stop the server running on port 9123, use:
+sudo lsof -ti:9123 | xargs -r sudo kill -9  
+```
+
 ## Elderly User Considerations
 
 - **Voice Recognition**: Optimize for older voices that may be softer or less distinct
