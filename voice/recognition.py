@@ -14,7 +14,8 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.frames.frames import TextFrame, InputAudioRawFrame, OutputAudioRawFrame
-from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
+from pipecat.transports.local.audio import LocalAudioTransportParams
+from utils.pausable_audio_transport import PausableLocalAudioTransport
 from pipecat.transports.base_transport import TransportParams
 from pipecat.services.whisper import WhisperSTTService, Model
 from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
@@ -514,7 +515,7 @@ class VoiceSystem:
                 audio_out_enabled=False,
                 audio_in_device_index=self.device_index  # Using the correct parameter name
             )
-            self.transport = LocalAudioTransport(transport_params)
+            self.transport = PausableLocalAudioTransport(transport_params)
             logger.info("Audio transport initialized successfully")
             
             # Choose speech recognition service based on configuration
