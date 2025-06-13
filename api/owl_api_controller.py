@@ -25,8 +25,7 @@ async def execute_movement(owl, movement_type, duration=1.0):
     move_func = movement_map.get(movement_type)
     if move_func:
         logger.info(f"Executing movement: {movement_type}, duration: {duration}")
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, move_func)
+        await move_func()
         # Return immediately without waiting for the full duration
         # This allows speech to start while movement is still in progress
         return True
@@ -97,7 +96,7 @@ async def handle_owl_command(request):
         }
         move_func = movement_map.get(move_type)
         if move_func:
-            loop.run_in_executor(None, move_func)
+            await move_func()
         else:
             return web.Response(text="Invalid movement type", status=400)
     return web.json_response({"status": "command received"})

@@ -217,7 +217,5 @@ class SpeechMovementSync:
                 move_func = self.movement_map.get(movement_type)
                 if move_func:
                     logger.info(f"Executing movement: {movement_type} for {duration}s")
-                    # Execute movement in a separate thread
-                    loop = asyncio.get_running_loop()
-                    await loop.run_in_executor(None, move_func)
+                    await move_func()
                     await asyncio.sleep(duration)

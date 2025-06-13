@@ -69,8 +69,7 @@ async def process_owl_movements(movements: list, owl_controller: OwlController):
         
         move_func = movement_map.get(move_type)
         if move_func:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, move_func)
+            await move_func()
             await asyncio.sleep(duration)
 
 async def start_http_server(event_bus, owl, tts_service, speech_movement_sync):
