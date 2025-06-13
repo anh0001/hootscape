@@ -30,3 +30,17 @@ class PausableLocalAudioTransport(LocalAudioTransport):
         if not self._input:
             self._input = PausableLocalAudioInputTransport(self._pyaudio, self._params)
         return self._input
+
+    def pause(self):
+        """Pause the audio input stream."""
+        try:
+            self.input().pause_input()
+        except Exception:
+            pass
+
+    def resume(self):
+        """Resume the audio input stream."""
+        try:
+            self.input().resume_input()
+        except Exception:
+            pass
